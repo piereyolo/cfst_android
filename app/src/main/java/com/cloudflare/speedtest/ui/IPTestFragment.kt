@@ -185,20 +185,17 @@ class IPTestFragment : Fragment() {
     inner class ABAdapter : RecyclerView.Adapter<ABAdapter.ViewHolder>() {
 
         private val items = mutableListOf<SharedViewModel.ABItem>()
-        private val selectedSet = mutableSetOf<String>()
 
         fun setData(newItems: List<SharedViewModel.ABItem>) {
             items.clear()
             items.addAll(newItems)
-            selectedSet.clear()
-            items.filter { it.isSelected }.forEach { selectedSet.add(it.ab) }
             notifyDataSetChanged()
             updateSelectedCount(getSelectedCount())
         }
 
-        fun getSelectedABs(): List<String> = selectedSet.toList()
+        fun getSelectedABs(): List<String> = items.filter { it.isSelected }.map { it.ab }
 
-        fun getSelectedCount(): Int = selectedSet.size
+        fun getSelectedCount(): Int = items.count { it.isSelected }
 
         inner class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
             val checkBox: android.widget.CheckBox = itemView.findViewById(R.id.checkBox)
@@ -214,22 +211,24 @@ class IPTestFragment : Fragment() {
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             val item = items[position]
             holder.abTextView.text = item.ab
-            holder.checkBox.isChecked = selectedSet.contains(item.ab)
 
+            // 先移除监听器
+            holder.checkBox.setOnCheckedChangeListener(null)
+
+            // 设置选中状态
+            holder.checkBox.isChecked = item.isSelected
+
+            // 设置监听器
             holder.checkBox.setOnCheckedChangeListener { _, isChecked ->
-                if (isChecked) {
-                    selectedSet.add(item.ab)
-                } else {
-                    selectedSet.remove(item.ab)
-                }
-                updateSelectedCount(selectedSet.size)
+                item.isSelected = isChecked
+                updateSelectedCount(getSelectedCount())
             }
 
             holder.itemView.setOnClickListener {
                 holder.checkBox.isChecked = !holder.checkBox.isChecked
             }
         }
-
+        
         override fun getItemCount(): Int = items.size
     }
 }
