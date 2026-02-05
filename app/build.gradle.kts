@@ -18,6 +18,14 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
+     signingConfigs {
+        create("release") {
+            storeFile = file("Untitled.jks")
+            storePassword = "12345678"
+            keyAlias = "key0"
+            keyPassword = "12345678"
+        }
+    }
 
     buildTypes {
         release {
