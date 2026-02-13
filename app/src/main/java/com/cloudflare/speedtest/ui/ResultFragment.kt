@@ -14,6 +14,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import org.json.JSONObject
 import java.io.File
 import java.net.InetSocketAddress
 import java.net.Socket
@@ -40,6 +41,8 @@ class ResultFragment : Fragment() {
 
     private val executor: ExecutorService = Executors.newFixedThreadPool(10)
     private val handler = Handler(Looper.getMainLooper())
+
+    private val sResultSettingFile = "ResultSetting.json"
     // 默认延迟阈值
     private var maxDelayThreshold = 200
 
@@ -83,6 +86,7 @@ class ResultFragment : Fragment() {
 
         // 设置按钮点击事件
         btnLoadResults.setOnClickListener {
+            SaveConfig()
             val thresholdText = etMaxDelay.text.toString()
             if (thresholdText.isNotEmpty()) {
                 maxDelayThreshold = thresholdText.toIntOrNull() ?: 200
@@ -172,7 +176,7 @@ class ResultFragment : Fragment() {
                 // 读取文件内容
                 val lines = file.readLines()
 
-                if (lines.size <= 1) { // 只有表头或为空
+                if (lines.size <= 0) { // 只有表头或为空
                     requireActivity().runOnUiThread {
                         progressBar.visibility = View.GONE
                         emptyView.text = "结果文件为空"
@@ -186,7 +190,7 @@ class ResultFragment : Fragment() {
                 // 解析CSV数据（跳过表头）
                 val results = mutableListOf<ResultItem>()
 
-                for (i in 1 until lines.size) {
+                for (i in 0 until lines.size) {
                     val line = lines[i].trim()
                     if (line.isEmpty()) continue
 
@@ -223,9 +227,9 @@ class ResultFragment : Fragment() {
                     // 更新文件信息和统计
                     tvFileInfo.text = "文件: ${file.name} (${file.length()} bytes, ${file.lastModified().toReadableTime()})"
 
-                    val totalLines = lines.size - 1
+                    val totalLines = lines.size
                     val filteredCount = results.size
-                    val successCount = lines.count { it.contains(",成功,") } - 1
+                    val successCount = lines.count { it.contains(",成功,") }
                     val failedCount = totalLines - successCount
 
                     tvStats.text = "统计: 总共 {$totalLines} 个结果 | 成功{$successCount}个 | 失败{$failedCount}个 | 过滤后{$filteredCount}个"
@@ -408,9 +412,41 @@ class ResultFragment : Fragment() {
         override fun getItemCount(): Int = items.size
     }
 
+
+    fun LoadConfig(){
+        val context = requireContext()
+        val j_text = File(context.filesDir,sResultSettingFile).let { file -> if (file.isFile) file.readText().let { if (it == "") "{}" else it } else "{}" }
+        val j_json = JSONObject(j_text)
+
+        try {
+            if (j_json.has("最大延迟")){
+                val nThreadCount = j_json.getInt("最大延迟")
+                view?.findViewById<EditText>(R.id.etMaxDelay)?.setText(nThreadCount.toString())
+            }
+        } catch (_: Exception) {
+        }
+
+
+
+
+    }
+
+    fun SaveConfig(){
+
+        val j_json = JSONObject()
+
+        j_json.put("最大延迟", view?.findViewById<EditText>(R.id.etMaxDelay)?.text.toString())
+
+
+        val context = requireContext()
+        File(context.filesDir, sResultSettingFile)?.writeText(j_json.toString())
+
+    }
+
     override fun onResume() {
         super.onResume()
         // 每次切换到这个Tab时，重新加载数据
+        LoadConfig()
         if (::etMaxDelay.isInitialized) {
             val thresholdText = etMaxDelay.text.toString()
             if (thresholdText.isNotEmpty()) {

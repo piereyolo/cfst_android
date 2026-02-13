@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <!-- 第一个网址输入框 -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="网址1:"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="4dp" />
+
+    <EditText
+        android:id="@+id/etUrl1"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="post请求用的"
+        android:inputType="textUri"
+        android:singleLine="true"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:padding="12dp"
+        android:layout_marginBottom="16dp" />
+
+    <!-- 第二个网址输入框 -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="网址2:"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="4dp" />
+
+    <EditText
+        android:id="@+id/etUrl2"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="GetTestResult用的"
+        android:inputType="textUri"
+        android:singleLine="true"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:padding="12dp"
+        android:layout_marginBottom="24dp" />
+
+    <!-- 按钮容器（水平排列） -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:weightSum="2"
+        android:layout_marginBottom="2dp">
+
+        <!-- 保存网址按钮 -->
+        <Button
+            android:id="@+id/btnSaveUrls"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="保存网址"
+            android:layout_marginEnd="8dp"
+            style="@style/Widget.AppCompat.Button" />
+
+        <Button
+            android:id="@+id/btnLocalTestHttping"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="本地下载测速"
+            android:layout_marginStart="8dp"
+            style="@style/Widget.AppCompat.Button" />
+
+        <Button
+            android:id="@+id/stopTestDownloadButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="停止测试"
+            android:layout_marginStart="8dp"
+            android:backgroundTint="@color/red_500"
+            android:textColor="@android:color/white"
+            android:visibility="gone" />
+
+    </LinearLayout>
+
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:weightSum="2"
+        android:layout_marginBottom="2dp">
+
+        <!-- 发送请求按钮 -->
+        <Button
+            android:id="@+id/btnSendRequest"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="发送请求"
+            android:layout_marginEnd="8dp"
+            style="@style/Widget.AppCompat.Button" />
+
+        <!-- 获取结果按钮 -->
+        <Button
+            android:id="@+id/btnGetResult"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="获取结果"
+            android:layout_marginStart="8dp"
+            style="@style/Widget.AppCompat.Button" />
+
+    </LinearLayout>
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rvAbPrefixes"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="8dp"
+        android:layout_weight="1" />
+
+</LinearLayout>

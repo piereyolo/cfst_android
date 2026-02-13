@@ -469,7 +469,7 @@ class SharedViewModel : ViewModel() {
                     val status = if (result.success) "成功" else "失败"
                     val time = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
                         .format(Date(result.timestamp))
-                   if(result.success&&result.latency<1000)content.append("${result.ip},${result.latency},$status,$time\n")
+                   if(result.success&&result.latency<5000)content.append("${result.ip},${result.latency},$status,$time\n")
                 }
 
                 // 保存到应用的files目录

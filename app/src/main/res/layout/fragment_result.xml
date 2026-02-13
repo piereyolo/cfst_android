@@ -75,13 +75,15 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:weightSum="1"
         android:orientation="horizontal"
         android:layout_marginBottom="16dp">
 
         <Button
             android:id="@+id/btnCopyAll"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_weight="0.5"
             android:text="全复制"
             android:layout_marginStart="8dp"
             android:backgroundTint="@color/teal_700"
@@ -89,8 +91,9 @@
 
         <Button
             android:id="@+id/btnCheckAllIPResults"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_weight="0.5"
             android:text="验证所有IP"
             android:layout_marginStart="8dp"
             android:backgroundTint="@color/teal_700"

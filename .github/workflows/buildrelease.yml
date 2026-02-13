@@ -1,0 +1,43 @@
+name: Build Android Release
+
+on:
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Build Release APK
+        env:
+          KEYSTORE_FILE: Untitled.jks
+          KEYSTORE_PASSWORD: 12345678
+          KEY_ALIAS: key0
+          KEY_PASSWORD: 12345678
+        run: |
+          ./gradlew assembleRelease
+          
+          echo "✅ 构建完成！"
+          echo "APK文件:"
+          find . -name "*.apk" -type f | grep -v unaligned
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-app
+          path: app/build/outputs/apk/release/*.apk

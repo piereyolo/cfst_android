@@ -20,9 +20,12 @@ import androidx.recyclerview.widget.RecyclerView
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
+import android.widget.RadioGroup
 import androidx.appcompat.app.AlertDialog
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import org.json.JSONObject
+import java.io.File
 
 
 class IPTestFragment : Fragment() {
@@ -39,6 +42,8 @@ class IPTestFragment : Fragment() {
     private lateinit var etDInterval: EditText
     private lateinit var tvSelectedCount: TextView
     private lateinit var tvGeneratedIPs: TextView
+
+    private val sTestConfigFile="testconfig.json"
 
     // 权限请求码
 
@@ -155,6 +160,8 @@ class IPTestFragment : Fragment() {
         val estimatedIPs = selectedABs.size * 256 * ((255 - dStart) / dInterval + 1)
         tvGeneratedIPs.text = "预计生成IP: ${estimatedIPs}个"
 
+        SaveConfig()
+
         sharedViewModel.startTest(selectedABs)
     }
 
@@ -185,20 +192,17 @@ class IPTestFragment : Fragment() {
     inner class ABAdapter : RecyclerView.Adapter<ABAdapter.ViewHolder>() {
 
         private val items = mutableListOf<SharedViewModel.ABItem>()
-        private val selectedSet = mutableSetOf<String>()
 
         fun setData(newItems: List<SharedViewModel.ABItem>) {
             items.clear()
             items.addAll(newItems)
-            selectedSet.clear()
-            items.filter { it.isSelected }.forEach { selectedSet.add(it.ab) }
             notifyDataSetChanged()
             updateSelectedCount(getSelectedCount())
         }
 
-        fun getSelectedABs(): List<String> = selectedSet.toList()
+        fun getSelectedABs(): List<String> = items.filter { it.isSelected }.map { it.ab }
 
-        fun getSelectedCount(): Int = selectedSet.size
+        fun getSelectedCount(): Int = items.count { it.isSelected }
 
         inner class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
             val checkBox: android.widget.CheckBox = itemView.findViewById(R.id.checkBox)
@@ -214,15 +218,17 @@ class IPTestFragment : Fragment() {
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             val item = items[position]
             holder.abTextView.text = item.ab
-            holder.checkBox.isChecked = selectedSet.contains(item.ab)
 
+            // 先移除监听器
+            holder.checkBox.setOnCheckedChangeListener(null)
+
+            // 设置选中状态
+            holder.checkBox.isChecked = item.isSelected
+
+            // 设置监听器
             holder.checkBox.setOnCheckedChangeListener { _, isChecked ->
-                if (isChecked) {
-                    selectedSet.add(item.ab)
-                } else {
-                    selectedSet.remove(item.ab)
-                }
-                updateSelectedCount(selectedSet.size)
+                item.isSelected = isChecked
+                updateSelectedCount(getSelectedCount())
             }
 
             holder.itemView.setOnClickListener {
@@ -231,5 +237,55 @@ class IPTestFragment : Fragment() {
         }
 
         override fun getItemCount(): Int = items.size
+    }
+
+    fun LoadConfig(){
+        val context = requireContext()
+        val j_text = File(context.filesDir,sTestConfigFile).let { file -> if (file.isFile) file.readText().let { if (it == "") "{}" else it } else "{}" }
+        val j_json = JSONObject(j_text)
+
+        try {
+            if (j_json.has("测试线程数")){
+                val nThreadCount = j_json.getInt("测试线程数")
+                view?.findViewById<EditText>(R.id.etThreadCount)?.setText(nThreadCount.toString())
+            }
+        } catch (_: Exception) {
+        }
+
+        try {
+            if (j_json.has("D段起始值")){
+                val nDValueBegin = j_json.getInt("D段起始值")
+                view?.findViewById<EditText>(R.id.etDStart)?.setText(nDValueBegin.toString())
+            }
+        } catch (_: Exception) {
+        }
+
+        try {
+            if (j_json.has("间隔数")){
+                val nDIntervalValue = j_json.getInt("间隔数")
+                view?.findViewById<EditText>(R.id.etDInterval)?.setText(nDIntervalValue.toString())
+            }
+        } catch (_: Exception) {
+        }
+
+        updateTestParams()
+    }
+
+    fun SaveConfig(){
+
+        val j_json = JSONObject()
+
+        j_json.put("测试线程数", view?.findViewById<EditText>(R.id.etThreadCount)?.text.toString())
+        j_json.put("D段起始值", view?.findViewById<EditText>(R.id.etDStart)?.text.toString())
+        j_json.put("间隔数", view?.findViewById<EditText>(R.id.etDInterval)?.text.toString())
+
+        val context = requireContext()
+       File(context.filesDir, sTestConfigFile)?.writeText(j_json.toString())
+
+    }
+
+    override fun onResume() {
+        super.onResume()
+        LoadConfig()
     }
 }

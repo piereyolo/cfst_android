@@ -52,6 +52,8 @@ class MainActivity : AppCompatActivity() {
 
         adapter.addFragment(ResultFragment(), "测试结果")  // 添加第三个Tab
 
+        adapter.addFragment(PushIPToServerTestFragment(),"上传测试")
+
         viewPager.adapter = adapter
 
         viewPager.isUserInputEnabled = false
