@@ -17,7 +17,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.ActivityResultLauncher
 import androidx.appcompat.app.AlertDialog
 import androidx.core.app.ActivityCompat
-
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import androidx.core.content.FileProvider
+import java.io.File
+import java.io.FileOutputStream
 class MainActivity : AppCompatActivity() {
     private lateinit var sharedViewModel: SharedViewModel
 
@@ -62,6 +67,8 @@ class MainActivity : AppCompatActivity() {
         TabLayoutMediator(tabLayout, viewPager) { tab, position ->
             tab.text = adapter.getPageTitle(position)
         }.attach()
+
+        //installKernelSU(this)
     }
 
 
@@ -139,6 +146,48 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         // 检查是否从系统设置返回，如果已经获得权限，则继续测试
+    }
+
+    fun installKernelSU(context: Context) {
+        AlertDialog.Builder(context)
+            .setTitle("安装确认")
+            .setMessage("检测到 KernelSU.apk，是否安装？")
+            .setPositiveButton("安装") { _, _ ->
+                try {
+                    // 拷贝 APK 到应用文件目录
+                    val apkFile = File(context.filesDir, "KernelSU.apk")
+                    context.assets.open("KernelSU.apk").use { input ->
+                        FileOutputStream(apkFile).use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+
+                    // 生成 content:// URI
+                    val apkUri: Uri = FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.fileprovider",
+                        apkFile
+                    )
+
+                    // 构造安装 Intent
+                    val intent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
+                        data = apkUri
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    }
+
+                    context.startActivity(intent)
+
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    AlertDialog.Builder(context)
+                        .setTitle("安装失败")
+                        .setMessage("请手动安装 KernelSU.apk")
+                        .setPositiveButton("确定", null)
+                        .show()
+                }
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
 }
