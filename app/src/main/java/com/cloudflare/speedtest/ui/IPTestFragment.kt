@@ -43,6 +43,9 @@ class IPTestFragment : Fragment() {
     private lateinit var tvSelectedCount: TextView
     private lateinit var tvGeneratedIPs: TextView
 
+    private lateinit var btnSelectAll: Button
+    private lateinit var btninvertSelection: Button
+
     private val sTestConfigFile="testconfig.json"
 
     // 权限请求码
@@ -72,6 +75,9 @@ class IPTestFragment : Fragment() {
         tvSelectedCount = view.findViewById(R.id.tvSelectedCount)
         tvGeneratedIPs = view.findViewById(R.id.tvGeneratedIPs)
 
+        btnSelectAll = view.findViewById(R.id.btnSelectAll)
+        btninvertSelection = view.findViewById(R.id.btninvertSelection)
+
         // 设置RecyclerView
         adapter = ABAdapter()
         recyclerView.layoutManager = LinearLayoutManager(requireContext())
@@ -80,6 +86,11 @@ class IPTestFragment : Fragment() {
         // 设置按钮点击事件
         startButton.setOnClickListener { startTest() }
         stopButton.setOnClickListener { stopTest() }
+
+
+        // 设置全选/清空按钮事件
+        btnSelectAll.setOnClickListener { selectAll() }
+        btninvertSelection.setOnClickListener { invertSelection() }
 
         // 设置参数输入监听
         setupParameterInputs()
@@ -169,7 +180,18 @@ class IPTestFragment : Fragment() {
         sharedViewModel.stopTest()
     }
 
+    private fun selectAll() {
+        adapter.selectAll()
+        updateSelectedCount(adapter.getSelectedCount())
+        //Toast.makeText(requireContext(), "已全选 ${adapter.getSelectedCount()} 个前缀", Toast.LENGTH_SHORT).show()
+    }
 
+    // 清空所有选择
+    private fun invertSelection() {
+        adapter.invertSelection()
+        updateSelectedCount(adapter.getSelectedCount())
+        //Toast.makeText(requireContext(), "已清空所有选择", Toast.LENGTH_SHORT).show()
+    }
 
     private fun updateTestStatus(status: SharedViewModel.TestStatus) {
         startButton.isEnabled = !status.isRunning
@@ -204,9 +226,52 @@ class IPTestFragment : Fragment() {
 
         fun getSelectedCount(): Int = items.count { it.isSelected }
 
+
+        // 全选
+        fun selectAll() {
+            if (items.isEmpty()) return
+            var changed = false
+            items.forEach {
+                if (!it.isSelected) {
+                    it.isSelected = true
+                    changed = true
+                }
+            }
+            if (changed) {
+                notifyDataSetChanged()
+            }
+        }
+
+        // 清空所有选择
+        fun clearAll() {
+            if (items.isEmpty()) return
+            var changed = false
+            items.forEach {
+                if (it.isSelected) {
+                    it.isSelected = false
+                    changed = true
+                }
+            }
+            if (changed) {
+                notifyDataSetChanged()
+            }
+        }
+
+        // 反选
+        fun invertSelection() {
+            if (items.isEmpty()) return
+            items.forEach {
+                it.isSelected = !it.isSelected
+            }
+            notifyDataSetChanged()
+            updateSelectedCount(getSelectedCount())
+        }
+
         inner class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
             val checkBox: android.widget.CheckBox = itemView.findViewById(R.id.checkBox)
             val abTextView: TextView = itemView.findViewById(R.id.abTextView)
+
+
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
