@@ -150,9 +150,9 @@ class IPTestFragment : Fragment() {
         }
 
         // 初始化参数
-        etThreadCount.setText("20")
-        etDStart.setText("1")
-        etDInterval.setText("8")
+        etThreadCount.setText("100")
+        etDStart.setText("LAX,HKG")
+        etDInterval.setText("33")
         updateTestParams()
     }
 
@@ -164,11 +164,11 @@ class IPTestFragment : Fragment() {
         }
 
         val threads = etThreadCount.text.toString().toIntOrNull() ?: 10
-        val dStart = etDStart.text.toString().toIntOrNull() ?: 1
+        val dStart = etDStart.text.toString().isEmpty() ?: "LAX,HKG"
         val dInterval = etDInterval.text.toString().toIntOrNull() ?: 8
 
         // 计算预计生成的IP数量
-        val estimatedIPs = selectedABs.size * 256 * ((255 - dStart) / dInterval + 1)
+        val estimatedIPs = selectedABs.size * 256 * (255 / dInterval + 1)
         tvGeneratedIPs.text = "预计生成IP: ${estimatedIPs}个"
 
         SaveConfig()
@@ -319,7 +319,7 @@ class IPTestFragment : Fragment() {
 
         try {
             if (j_json.has("D段起始值")){
-                val nDValueBegin = j_json.getInt("D段起始值")
+                val nDValueBegin = j_json.getString("D段起始值")
                 view?.findViewById<EditText>(R.id.etDStart)?.setText(nDValueBegin.toString())
             }
         } catch (_: Exception) {
