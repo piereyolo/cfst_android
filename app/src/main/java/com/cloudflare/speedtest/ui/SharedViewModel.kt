@@ -33,7 +33,7 @@ class SharedViewModel : ViewModel() {
 
     // 测试参数
     private val _testThreads = MutableLiveData(100)
-    private val _testDStart = MutableLiveData("LAX,HKG")
+    private val _testDStart = MutableLiveData("LAX")
     private val _testDInterval = MutableLiveData(55)
     val testThreads: LiveData<Int> get() = _testThreads
     val testDStart: LiveData<String> get() = _testDStart
