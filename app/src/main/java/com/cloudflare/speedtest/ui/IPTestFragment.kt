@@ -112,7 +112,7 @@ class IPTestFragment : Fragment() {
 
     private fun updateTestParams() {
         val threads = etThreadCount.text.toString().toIntOrNull() ?: 0
-        val dStart = etDStart.text.toString().toIntOrNull() ?: 1
+        val dStart = etDStart.text.toString().takeIf { it.isNotEmpty() }?:"LAX,"
         val dInterval = etDInterval.text.toString().toIntOrNull() ?: 8
 
         sharedViewModel.updateTestParams(threads, dStart, dInterval)
@@ -164,7 +164,6 @@ class IPTestFragment : Fragment() {
         }
 
         val threads = etThreadCount.text.toString().toIntOrNull() ?: 10
-        val dStart = etDStart.text.toString().isEmpty() ?: "LAX,HKG"
         val dInterval = etDInterval.text.toString().toIntOrNull() ?: 8
 
         // 计算预计生成的IP数量
