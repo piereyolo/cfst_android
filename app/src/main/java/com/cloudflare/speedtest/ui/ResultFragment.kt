@@ -44,7 +44,7 @@ class ResultFragment : Fragment() {
 
     private val sResultSettingFile = "ResultSetting.json"
     // 默认延迟阈值
-    private var maxDelayThreshold = 200
+    private var maxDelayThreshold = 2000
 
     override fun onCreateView(
         inflater: LayoutInflater,
