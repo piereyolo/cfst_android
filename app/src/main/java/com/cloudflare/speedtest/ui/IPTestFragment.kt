@@ -152,7 +152,7 @@ class IPTestFragment : Fragment() {
         // 初始化参数
         etThreadCount.setText("100")
         etDStart.setText("LAX,HKG")
-        etDInterval.setText("33")
+        etDInterval.setText("55")
         updateTestParams()
     }
 
