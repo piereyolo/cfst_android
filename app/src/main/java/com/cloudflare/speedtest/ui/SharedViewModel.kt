@@ -7,12 +7,19 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel  // 添加这行
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
+import com.cloudflare.speedtest.core.IPTestHelper
+import com.cloudflare.speedtest.core.IPTestHelper.extractRegionCode1
+import com.cloudflare.speedtest.core.IPTestHelper.getRegionChineseName
+import java.io.ByteArrayOutputStream
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.*
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.random.Random
+import kotlin.toString
 
 class SharedViewModel : ViewModel() {
 
@@ -25,11 +32,11 @@ class SharedViewModel : ViewModel() {
     val expandedABs: LiveData<List<ABItem>> get() = _expandedABs
 
     // 测试参数
-    private val _testThreads = MutableLiveData(10)
-    private val _testDStart = MutableLiveData(1)
-    private val _testDInterval = MutableLiveData(8)
+    private val _testThreads = MutableLiveData(100)
+    private val _testDStart = MutableLiveData("LAX")
+    private val _testDInterval = MutableLiveData(33)
     val testThreads: LiveData<Int> get() = _testThreads
-    val testDStart: LiveData<Int> get() = _testDStart
+    val testDStart: LiveData<String> get() = _testDStart
     val testDInterval: LiveData<Int> get() = _testDInterval
 
     // 测试状态
@@ -163,7 +170,6 @@ class SharedViewModel : ViewModel() {
     // 更新测试参数
     fun updateTestParams(threads: Int, dStart: Int, dInterval: Int) {
         _testThreads.value = threads.coerceIn(0, 200)
-        _testDStart.value = dStart.coerceIn(0, 255)
         _testDInterval.value = dInterval.coerceIn(1, 254)
     }
 
@@ -198,11 +204,11 @@ class SharedViewModel : ViewModel() {
         executor?.execute {
             try {
                 val selectedCIDRs = _selectedCIDRs.value ?: emptySet()
-                val dStart = _testDStart.value ?: 1
+                val dStart = _testDStart.value ?: "LAX"
                 val dInterval = _testDInterval.value ?: 8
 
                 // 生成测试IP列表
-                val testIPs = generateTestIPs(selectedABs, selectedCIDRs, dStart, dInterval)
+                val testIPs = generateTestIPs(selectedABs, selectedCIDRs, 254)
 
                 if (testIPs.isEmpty()) {
                     mainHandler.post {
@@ -224,20 +230,86 @@ class SharedViewModel : ViewModel() {
                     )
                 }
 
-                // 准备测试任务
-                val results = Collections.synchronizedList(mutableListOf<TestResult>())
-                val completedCount = AtomicInteger(0)
-                val latch = CountDownLatch(testIPs.size)
-                val futuresList = mutableListOf<Future<*>>()
+                // ===== 第一阶段：筛选区域，生成 testIPs2 =====
+                val testIPs2 = Collections.synchronizedList(mutableListOf<String>())
+                val phase1Latch = CountDownLatch(testIPs.size)
+                val phase1Futures = mutableListOf<Future<*>>()
 
-                // 为每个IP创建测试任务
+                mainHandler.post {
+                    _testStatus.value = TestStatus(
+                        isRunning = true,
+                        total = testIPs.size,
+                        completed = 0,
+                        message = "第一阶段：筛选区域 ${testIPs.size} 个IP..."
+                    )
+                }
+
                 for (ip in testIPs) {
                     if (shouldStop) break
 
                     val future = executor?.submit {
                         try {
+                            if (shouldStop) return@submit
+
+                            val sRegion = testTCPConnectRegion(ip, 8080)
+
+                            if (dStart.contains(sRegion, ignoreCase = true)) {
+                                val tmplist = generateTestIPs(ip, selectedCIDRs, dInterval)
+                                testIPs2.addAll(tmplist)
+                            }
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        } finally {
+                            phase1Latch.countDown()
+                        }
+                    }
+
+                    future?.let { phase1Futures.add(it) }
+                }
+
+                phase1Latch.await()
+
+                if (shouldStop) {
+                    mainHandler.post {
+                        _testStatus.value = TestStatus(isRunning = false, message = "测试已停止")
+                    }
+                    return@execute
+                }
+
+                // ===== 第二阶段：测试 testIPs2 的延迟 =====
+                val results = Collections.synchronizedList(mutableListOf<TestResult>())
+                val totalTest = testIPs2.size
+                val completedCount = AtomicInteger(0)
+                val phase2Latch = CountDownLatch(totalTest)
+                val phase2Futures = mutableListOf<Future<*>>()
+
+                if (totalTest == 0) {
+                    mainHandler.post {
+                        _testStatus.value = TestStatus(
+                            isRunning = false,
+                            message = "筛选后没有匹配的IP地址"
+                        )
+                        isTesting = false
+                    }
+                    return@execute
+                }
+
+                mainHandler.post {
+                    _testStatus.value = TestStatus(
+                        isRunning = true,
+                        total = totalTest,
+                        completed = 0,
+                        message = "第二阶段：测试 ${totalTest} 个IP延迟，使用 $threads 个线程..."
+                    )
+                }
+
+                for (ip in testIPs2) {
+                    if (shouldStop) break
+
+                    val future = executor?.submit {
+                        try {
                             if (shouldStop) {
-                                latch.countDown()
+                                phase2Latch.countDown()
                                 return@submit
                             }
 
@@ -250,34 +322,32 @@ class SharedViewModel : ViewModel() {
 
                             results.add(result)
 
-                            // 更新进度
                             val currentCompleted = completedCount.incrementAndGet()
-                            if (currentCompleted % 50 == 0 || currentCompleted == testIPs.size) {
-                                val progress = currentCompleted.toFloat() / testIPs.size
+                            if (currentCompleted % 50 == 0 || currentCompleted == totalTest) {
+                                val progress = currentCompleted.toFloat() / totalTest
                                 mainHandler.post {
                                     _testStatus.value = TestStatus(
                                         isRunning = true,
                                         progress = progress,
-                                        total = testIPs.size,
+                                        total = totalTest,
                                         completed = currentCompleted,
-                                        message = "已测试: $currentCompleted/${testIPs.size} (${String.format("%.1f", progress * 100)}%)"
+                                        message = "已测试: $currentCompleted/$totalTest (${String.format("%.1f", progress * 100)}%)"
                                     )
                                 }
                             }
                         } catch (e: Exception) {
                             e.printStackTrace()
                         } finally {
-                            latch.countDown()
+                            phase2Latch.countDown()
                         }
                     }
 
-                    future?.let { futuresList.add(it) }
+                    future?.let { phase2Futures.add(it) }
                 }
 
-                futures = futuresList
+                futures = phase2Futures
 
-                // 等待所有任务完成
-                latch.await()
+                phase2Latch.await()
 
                 if (!shouldStop) {
                     // 测试完成，排序结果
@@ -288,8 +358,8 @@ class SharedViewModel : ViewModel() {
                         _testStatus.value = TestStatus(
                             isRunning = false,
                             progress = 1f,
-                            total = testIPs.size,
-                            completed = testIPs.size,
+                            total = totalTest,
+                            completed = totalTest,
                             message = "测试完成！成功: ${sortedResults.count { it.success }}, 失败: ${sortedResults.count { !it.success }}"
                         )
                     }
@@ -366,7 +436,6 @@ class SharedViewModel : ViewModel() {
     private fun generateTestIPs(
         selectedABs: List<String>,
         selectedCIDRs: Set<String>,
-        dStart: Int,
         dInterval: Int
     ): List<String> {
         val result = mutableListOf<String>()
@@ -381,7 +450,7 @@ class SharedViewModel : ViewModel() {
             for (c in 0..255) {
                 if (shouldStop) break
 
-                var d = dStart
+                var d = Random.nextInt(1, dInterval + 1)
                 while (d <= 255) {
                     val ip = "$a.$b.$c.$d"
 
@@ -393,6 +462,33 @@ class SharedViewModel : ViewModel() {
                     d += dInterval
                 }
             }
+        }
+
+        return result
+    }
+
+    private fun generateTestIPs(
+        selectedABCs: String,
+        selectedCIDRs: Set<String>,
+        dInterval: Int
+    ): List<String> {
+        val result = mutableListOf<String>()
+
+        // 将CIDR转换为IP范围集合
+        val cidrRanges = selectedCIDRs.mapNotNull { parseCIDR(it) }
+
+        val (a, b,c,k) = selectedABCs.split(".").map { it.toInt() }
+
+        var d = Random.nextInt(1, dInterval + 1)
+        while (d <= 255) {
+            val ip = "$a.$b.$c.$d"
+
+            // 检查IP是否在任意CIDR范围内
+            if (isInCIDRRanges(ip, cidrRanges)) {
+                result.add(ip)
+            }
+
+            d += dInterval
         }
 
         return result
@@ -455,6 +551,66 @@ class SharedViewModel : ViewModel() {
             -1L
         }
     }
+
+    private fun testTCPConnectRegion(ip: String, port: Int,timeout: Int = 5000): String {
+        return run {
+            var socket: Socket? = null
+            try {
+                socket = Socket()
+                socket.soTimeout = timeout
+
+                // 1️⃣ TCP connect
+                socket.connect(InetSocketAddress(ip, port), timeout)
+
+                val connectEndTime = System.currentTimeMillis()
+
+
+                // 2️⃣ 发送最小 HTTP 请求（Cloudflare 能识别）
+                val request = buildString {
+                    append("GET / HTTP/1.1\r\n")
+                    append("Host: $ip\r\n")
+                    append("User-Agent: curl/8.7.1\r\n")
+                    append("Connection: close\r\n")
+                    append("\r\n")
+                }
+
+                val out = socket.getOutputStream()
+                out.write(request.toByteArray())
+                out.flush()
+
+                val input = socket.getInputStream()
+                val buffer = ByteArrayOutputStream()
+                val chunk = ByteArray(4096)
+                var len: Int
+
+                while (input.read(chunk).also { len = it } != -1) {
+                    buffer.write(chunk, 0, len)
+                }
+
+                val response = buffer.toString(Charsets.UTF_8)
+
+                val cfRay = response.lines()
+                    .find { it.startsWith("CF-RAY:", ignoreCase = true) }
+                    ?.substringAfter(':')
+                    ?.trim()
+
+                if (cfRay != null) {
+                    IPTestHelper.extractRegionCode1(cfRay)
+                }else
+                    "unknown"
+
+
+            } catch (e: Exception) {
+                "unknown"
+            } finally {
+                try {
+                    socket?.close()
+                } catch (_: Exception) {
+                }
+            }
+        }
+    }
+
 
     // 保存结果到文件
     // 保存结果到固定路径
