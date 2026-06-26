@@ -168,9 +168,10 @@ class SharedViewModel : ViewModel() {
     }
 
     // 更新测试参数
-    fun updateTestParams(threads: Int, dStart: Int, dInterval: Int) {
+    fun updateTestParams(threads: Int, dStart: String, dInterval: Int) {
         _testThreads.value = threads.coerceIn(0, 200)
-        _testDInterval.value = dInterval.coerceIn(1, 254)
+        _testDInterval.value = dInterval.coerceIn(1, 255)
+        _testDStart.value = dStart
     }
 
     // 开始测试 - 使用协程和异步处理，正确使用线程数
@@ -204,7 +205,7 @@ class SharedViewModel : ViewModel() {
         executor?.execute {
             try {
                 val selectedCIDRs = _selectedCIDRs.value ?: emptySet()
-                val dStart = _testDStart.value ?: "LAX"
+                val dStart = _testDStart.value?.takeIf { it.isNotEmpty() } ?: "LAX,"
                 val dInterval = _testDInterval.value ?: 8
 
                 // 生成测试IP列表
