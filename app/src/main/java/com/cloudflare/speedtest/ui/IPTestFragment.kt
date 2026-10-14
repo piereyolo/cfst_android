@@ -7,6 +7,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -40,6 +41,7 @@ class IPTestFragment : Fragment() {
     private lateinit var etThreadCount: EditText
     private lateinit var etDStart: EditText
     private lateinit var etDInterval: EditText
+    private lateinit var etPort: EditText
     private lateinit var tvSelectedCount: TextView
     private lateinit var tvGeneratedIPs: TextView
 
@@ -72,6 +74,7 @@ class IPTestFragment : Fragment() {
         etThreadCount = view.findViewById(R.id.etThreadCount)
         etDStart = view.findViewById(R.id.etDStart)
         etDInterval = view.findViewById(R.id.etDInterval)
+        etPort = view.findViewById(R.id.etPort)
         tvSelectedCount = view.findViewById(R.id.tvSelectedCount)
         tvGeneratedIPs = view.findViewById(R.id.tvGeneratedIPs)
 
@@ -108,14 +111,16 @@ class IPTestFragment : Fragment() {
         etThreadCount.addTextChangedListener(textWatcher)
         etDStart.addTextChangedListener(textWatcher)
         etDInterval.addTextChangedListener(textWatcher)
+        etPort.addTextChangedListener(textWatcher)
     }
 
     private fun updateTestParams() {
         val threads = etThreadCount.text.toString().toIntOrNull() ?: 0
         val dStart = etDStart.text.toString().takeIf { it.isNotEmpty() }?:"LAX,"
         val dInterval = etDInterval.text.toString().toIntOrNull() ?: 8
+        val port = etPort.text.toString().toIntOrNull() ?: SharedViewModel.DEFAULT_TEST_PORT
 
-        sharedViewModel.updateTestParams(threads, dStart, dInterval)
+        sharedViewModel.updateTestParams(threads, dStart, dInterval, port)
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -153,6 +158,7 @@ class IPTestFragment : Fragment() {
         etThreadCount.setText("100")
         etDStart.setText("LAX,HKG")
         etDInterval.setText("55")
+        etPort.setText(SharedViewModel.DEFAULT_TEST_PORT.toString())
         updateTestParams()
     }
 
@@ -332,6 +338,14 @@ class IPTestFragment : Fragment() {
         } catch (_: Exception) {
         }
 
+        try {
+            if (j_json.has("测试端口")){
+                val nPort = j_json.getInt("测试端口")
+                view?.findViewById<EditText>(R.id.etPort)?.setText(nPort.toString())
+            }
+        } catch (_: Exception) {
+        }
+
         updateTestParams()
     }
 
@@ -342,6 +356,7 @@ class IPTestFragment : Fragment() {
         j_json.put("测试线程数", view?.findViewById<EditText>(R.id.etThreadCount)?.text.toString())
         j_json.put("D段起始值", view?.findViewById<EditText>(R.id.etDStart)?.text.toString())
         j_json.put("间隔数", view?.findViewById<EditText>(R.id.etDInterval)?.text.toString())
+        j_json.put("测试端口", view?.findViewById<EditText>(R.id.etPort)?.text.toString())
 
         val context = requireContext()
        File(context.filesDir, sTestConfigFile)?.writeText(j_json.toString())
