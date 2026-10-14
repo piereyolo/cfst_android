@@ -4,6 +4,8 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.os.Bundle
+import android.os.Looper
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -15,16 +17,12 @@ import androidx.core.view.isVisible
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.ViewModelProvider
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
+
 import kotlinx.coroutines.launch
 import java.io.File
-import java.io.FileOutputStream
-import java.io.FileInputStream
-import java.io.BufferedReader
-import java.io.InputStreamReader
 import java.net.HttpURLConnection
-import java.net.URL
 
 
 import okhttp3.*
@@ -43,6 +41,7 @@ import java.util.concurrent.*
 import java.util.concurrent.atomic.AtomicInteger
 
 import com.cloudflare.speedtest.core.IPTestHelper
+import com.cloudflare.speedtest.core.RegionData
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -50,6 +49,7 @@ import kotlin.collections.forEach
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
+import com.cloudflare.speedtest.core.ProxyParser
 import com.cloudflare.speedtest.ui.ResultFragment.ResultItem
 import com.cloudflare.speedtest.ui.SharedViewModel.TestResult
 import java.util.Collections
@@ -98,21 +98,50 @@ object OkHttpHelper {
 
 class PushIPToServerTestFragment: Fragment() {
 
-    private lateinit var etUrl1: EditText
-    private lateinit var etUrl2: EditText
-    private lateinit var btnSaveUrls: Button
-    private lateinit var btnSendRequest: Button
-    private lateinit var btnGetResult: Button
+    private lateinit var etNodeLink: EditText
+    private lateinit var etMinKb: EditText
+    private lateinit var etProbeTarget: EditText
+    private lateinit var btnExportLinks: Button
 
     private lateinit var btnLocalTestHttping: Button
 
     private lateinit var stopTestDownloadButton: Button
 
     private lateinit var recyclerView: RecyclerView
+    private var tvStatus: TextView? = null
     private lateinit var adapter: ResultAdapter
 
     private val viewModelScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-    private val urlFileName = "saved_urls.txt"
+    // 后台任务作用域：不用 GlobalScope（脱离了任何生命周期、无法取消），
+    // 改用跟随 Fragment 实例的作用域，onDestroy 时统一取消
+    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    // 共享 ViewModel（Activity 作用域）：读取「IP测试」页配置的端口
+    private var sharedViewModel: SharedViewModel? = null
+
+    /** 测速端口，跟「IP测试」页的「测试端口」保持一致。 */
+    private fun testPort(): Int {
+        val vm = sharedViewModel ?: return IPTestHelper.DEFAULT_TARGET_PORT
+        return vm.testPort.value ?: IPTestHelper.DEFAULT_TARGET_PORT
+    }
+
+    /**
+     * 解析「探测目标」输入框。
+     *
+     * 填了 VLESS/Trojan 链接或 `host:port/path` 就用它当探测目标（这样 SNI/端口/路径/
+     * Host 头都会换成代理配置里那套）；留空则回落到默认的 Cloudflare 官方测速端点，
+     * 端口用「IP测试」页配置的值。
+     *
+     * 返回 null 表示用户填了但解析不出来，调用方应中止测试。
+     */
+    private fun resolveProbeTarget(fallbackPort: Int): IPTestHelper.ProbeTarget? {
+        val raw = etProbeTarget.text.toString().trim()
+        if (raw.isEmpty()) return IPTestHelper.defaultTargetWithPort(fallbackPort)
+
+        val target = IPTestHelper.parseProbeTarget(raw) ?: return null
+        Log.w("PushTest", "探测目标: $target")
+        return target
+    }
 
     private  var bStartDownloadTest=true
 
@@ -123,6 +152,9 @@ class PushIPToServerTestFragment: Fragment() {
     ): View? {
         val view = inflater.inflate(R.layout.fragment_ip_push_testserver, container, false)
 
+        // 共享 ViewModel（Activity 作用域），同一个实例，端口配置即时生效
+        sharedViewModel = ViewModelProvider(requireActivity()).get(SharedViewModel::class.java)
+
         // 初始化视图
         initViews(view)
 
@@ -131,14 +163,14 @@ class PushIPToServerTestFragment: Fragment() {
 
     private fun initViews(view: View) {
         recyclerView = view.findViewById(R.id.rvAbPrefixes)
-        btnSaveUrls = view.findViewById(R.id.btnSaveUrls)
-        btnSendRequest = view.findViewById(R.id.btnSendRequest)
-        btnGetResult = view.findViewById(R.id.btnGetResult)
+        tvStatus = view.findViewById(R.id.tvStatus)
+        btnExportLinks = view.findViewById(R.id.btnExportLinks)
         btnLocalTestHttping = view.findViewById(R.id.btnLocalTestHttping)
         stopTestDownloadButton = view.findViewById(R.id.stopTestDownloadButton)
 
-        etUrl1 = view.findViewById(R.id.etUrl1)
-        etUrl2 = view.findViewById(R.id.etUrl2)
+        etNodeLink = view.findViewById(R.id.etNodeLink)
+        etMinKb = view.findViewById(R.id.etMinKb)
+        etProbeTarget = view.findViewById(R.id.etProbeTarget)
 
         // 设置RecyclerView
         adapter = ResultAdapter()
@@ -150,16 +182,8 @@ class PushIPToServerTestFragment: Fragment() {
         }
 
         // 设置按钮点击事件
-        btnSaveUrls.setOnClickListener {
-            saveUrlsToFile()
-        }
-
-        btnSendRequest.setOnClickListener {
-            sendPostRequest()
-        }
-
-        btnGetResult.setOnClickListener {
-            sendGetRequest()
+        btnExportLinks.setOnClickListener {
+            exportLinksToClipboard()
         }
 
 
@@ -182,211 +206,43 @@ class PushIPToServerTestFragment: Fragment() {
 
     }
 
-    private fun saveUrlsToFile() {
-        val url1 = etUrl1.text.toString().trim()
-        val url2 = etUrl2.text.toString().trim()
 
-        if (url1.isEmpty() || url2.isEmpty()) {
-            Toast.makeText(requireContext(), "请填写两个网址", Toast.LENGTH_SHORT).show()
+    /**
+     * 把列表里速度达标的 IP 逐个替换进节点链接的 [[AABB]]，全部塞进剪切板。
+     *
+     * [[AABB]] 是**完整 IP** 的占位符，整段替换——
+     * 比如链接是 `vless://xxxx@[[AABB]]:2096?...`，就会变成 `vless://xxxx@162.159.207.241:2096?...`。
+     * 有几个 IP 就生成几条链接，每条一行，方便直接在客户端里挨个粘。
+     * 只在内存里处理，不做任何持久化。
+     */
+    private fun exportLinksToClipboard() {
+        val template = etNodeLink.text.toString().trim()
+        if (template.isEmpty()) {
+            Toast.makeText(requireContext(), "请先填入节点链接", Toast.LENGTH_SHORT).show()
             return
         }
 
-        try {
-            // 将两个网址保存到文件，每行一个
-            val content = "$url1\n$url2"
-            val file = File(requireContext().filesDir, urlFileName)
-
-            FileOutputStream(file).use { fos ->
-                fos.write(content.toByteArray())
+        val minKb = etMinKb.text.toString().trim().toDoubleOrNull()
+            ?: run {
+                Toast.makeText(requireContext(), "最低速度不是数字", Toast.LENGTH_SHORT).show()
+                return
             }
 
-            Toast.makeText(requireContext(), "网址已保存", Toast.LENGTH_SHORT).show()
-            updateStatus("网址已保存到文件")
-        } catch (e: Exception) {
-            e.printStackTrace()
-            Toast.makeText(requireContext(), "保存失败: ${e.message}", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun loadSavedUrls() {
-        try {
-            val file = File(requireContext().filesDir, urlFileName)
-            if (file.exists()) {
-                FileInputStream(file).use { fis ->
-                    BufferedReader(InputStreamReader(fis)).use { reader ->
-                        val url1 = reader.readLine() ?: ""
-                        val url2 = reader.readLine() ?: ""
-
-                        if (url1.isNotEmpty()) etUrl1.setText(url1)
-                        if (url2.isNotEmpty()) etUrl2.setText(url2)
-
-                        if (url1.isNotEmpty() || url2.isNotEmpty()) {
-                            updateStatus("已加载保存的网址")
-                        }
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    private fun sendPostRequest() {
-        var url = etUrl1.text.toString().trim()
-        if (url.isEmpty()) {
-            Toast.makeText(requireContext(), "请先填写POST请求网址", Toast.LENGTH_SHORT).show()
+        val matched = adapter.getItemsAtLeast(minKb)
+        if (matched.isEmpty()) {
+            Toast.makeText(requireContext(), "没有速度大于 $minKb KB/s 的IP，先跑「本地下载测速」", Toast.LENGTH_SHORT).show()
             return
         }
 
-        // 获取剪切板数据
+        val links = matched.map { item ->
+            ProxyParser.replaceAddress(template, item.ip.trim())
+        }
+
         val clipboard = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        if (!clipboard.hasPrimaryClip()) {
-            Toast.makeText(requireContext(), "剪切板中没有数据", Toast.LENGTH_SHORT).show()
-            return
-        }
+        clipboard.setPrimaryClip(ClipData.newPlainText("节点链接", links.joinToString("\n")))
 
-        val clipData = clipboard.primaryClip
-        if (clipData == null || clipData.itemCount == 0) {
-            Toast.makeText(requireContext(), "剪切板中没有数据", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val clipboardText = clipData.getItemAt(0).text?.toString() ?: ""
-        if (clipboardText.isEmpty()) {
-            Toast.makeText(requireContext(), "剪切板内容为空", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        updateStatus("正在发送POST请求...")
-
-        GlobalScope.launch(Dispatchers.IO) {
-            try {
-                // 创建 OkHttpClient
-                val client = if (url.startsWith("https://")) {
-                    OkHttpHelper.createOkHttpClient()
-                } else {
-                    // 对于 HTTP 请求，可能需要特殊处理
-                    OkHttpHelper.createUnsafeOkHttpClient()
-                }
-
-                // 创建请求体
-                val mediaType = "application/json; charset=utf-8".toMediaType()
-                val requestBody = clipboardText.toRequestBody(mediaType)
-
-                // 创建请求
-                val request = Request.Builder()
-                    .url(url)
-                    .post(requestBody)
-                    .addHeader("Content-Type", "application/json")
-                    .addHeader("Accept", "application/json")
-                    .build()
-
-                // 执行请求
-                val response = client.newCall(request).execute()
-                val responseCode = response.code
-                val responseBody = response.body?.string() ?: ""
-
-                GlobalScope.launch(Dispatchers.Main) {
-                    if (response.isSuccessful) {
-                        Toast.makeText(requireContext(), "POST请求成功", Toast.LENGTH_SHORT).show()
-                        updateStatus("POST请求成功: $responseBody")
-                    } else {
-                        Toast.makeText(requireContext(), "POST请求失败: $responseCode", Toast.LENGTH_SHORT).show()
-                        updateStatus("POST请求失败($responseCode): $responseBody")
-                    }
-                }
-
-            } catch (e: Exception) {
-                e.printStackTrace()
-                GlobalScope.launch(Dispatchers.Main) {
-                    val errorMsg = if (e.message?.contains("Cleartext HTTP traffic") == true) {
-                        "HTTP请求被禁止，请添加网络配置或使用HTTPS"
-                    } else {
-                        "请求异常: ${e.message}"
-                    }
-                    Toast.makeText(requireContext(), errorMsg, Toast.LENGTH_SHORT).show()
-                    updateStatus(errorMsg)
-                }
-            }
-        }
-    }
-
-    private fun sendGetRequest() {
-        val url = etUrl2.text.toString().trim()
-        if (url.isEmpty()) {
-            Toast.makeText(requireContext(), "请先填写GET请求网址", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        updateStatus("正在发送GET请求...")
-
-        GlobalScope.launch(Dispatchers.IO) {
-            try {
-                val connection = URL(url).openConnection() as HttpURLConnection
-                connection.requestMethod = "GET"
-                connection.connectTimeout = 10000
-                connection.readTimeout = 10000
-
-                val responseCode = connection.responseCode
-                val response = if (responseCode == HttpURLConnection.HTTP_OK) {
-                    connection.inputStream.bufferedReader().use { it.readText() }
-                } else {
-                    connection.errorStream.bufferedReader().use { it.readText() }
-                }
-
-                connection.disconnect()
-
-                // 解析返回的数据
-                val resultItems = parseResponseData(response)
-
-                GlobalScope.launch(Dispatchers.Main) {
-                    if (responseCode == HttpURLConnection.HTTP_OK) {
-                        if (resultItems.isNotEmpty()) {
-                            adapter.setData(resultItems)
-                            Toast.makeText(requireContext(), "获取到 ${resultItems.size} 条结果", Toast.LENGTH_SHORT).show()
-                            updateStatus("获取到 ${resultItems.size} 条结果")
-                        } else {
-                            Toast.makeText(requireContext(), "返回数据为空或格式不正确", Toast.LENGTH_SHORT).show()
-                            updateStatus("返回数据为空或格式不正确")
-                        }
-                    } else {
-                        Toast.makeText(requireContext(), "GET请求失败: $responseCode", Toast.LENGTH_SHORT).show()
-                        updateStatus("GET请求失败($responseCode): $response")
-                    }
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-                GlobalScope.launch(Dispatchers.Main) {
-                    Toast.makeText(requireContext(), "请求异常: ${e.message}", Toast.LENGTH_SHORT).show()
-                    updateStatus("请求异常: ${e.message}")
-                }
-            }
-        }
-    }
-
-    private fun parseResponseData(response: String): List<ResultItem> {
-        val resultItems = mutableListOf<ResultItem>()
-
-        if (response.isEmpty()) {
-            return resultItems
-        }
-
-        val lines = response.trim().split("\n")
-        for (line in lines) {
-            val parts = line.trim().split(",")
-            if (parts.size >= 2) {
-                try {
-                    val ip = parts[0].trim()
-                    val delay = parts[1].trim().toLong()
-                    val regionCode = parts[3].trim()?:"未知地区"
-                    resultItems.add(ResultItem(ip,regionCode,delay))
-                } catch (e: NumberFormatException) {
-                    // 跳过格式不正确的行
-                }
-            }
-        }
-
-        return resultItems
+        Toast.makeText(requireContext(), "已生成 ${links.size} 条链接到剪切板", Toast.LENGTH_LONG).show()
+        updateStatus("已生成 ${links.size} 条链接（速度 > $minKb KB/s），已送入剪切板")
     }
 
     private fun LocalTestHttping() {
@@ -410,11 +266,21 @@ class PushIPToServerTestFragment: Fragment() {
 
             canExit=false
 
+            val port = testPort()
+
+            // 探测目标：填了代理链接就用它，留空则回落到「IP测试」页的端口 + Cloudflare 官方端点
+            val target = resolveProbeTarget(port) ?: run {
+                Toast.makeText(requireContext(),
+                    "无法解析「探测目标」：${etProbeTarget.text}", Toast.LENGTH_SHORT).show()
+                return
+            }
+
             // 显示开始测试的Toast
-            Toast.makeText(requireContext(), "开始测试 ${ipList.size} 个IP...", Toast.LENGTH_SHORT).show()
+            Toast.makeText(requireContext(),
+                "开始测试 ${ipList.size} 个IP → ${target}...", Toast.LENGTH_SHORT).show()
             val testresults = Collections.synchronizedList(mutableListOf<PushIPToServerTestFragment.TestResult>())
             // 使用协程进行异步顺序测试
-            CoroutineScope(Dispatchers.IO).launch {
+            ioScope.launch {
                 val results = mutableListOf<ResultItem>()
                 var completedCount = 0
 
@@ -423,18 +289,18 @@ class PushIPToServerTestFragment: Fragment() {
                     if(!bStartDownloadTest)continue
                     val ipAddress = ip.trim()
                     // 测试当前IP
-                    val speed = IPTestHelper.downloadWithSpeedTracking(ipAddress, 10)
+                    val speed = IPTestHelper.downloadWithSpeedTracking(ipAddress, 10, target)
 
 
 
 
-                    results.add(ResultItem(ipAddress, speed.regionCode,(speed.delay ?: 0.0).toLong()))
+                    results.add(ResultItem(ipAddress, speed.regionCode,speed.delay))
                     completedCount++
 
                     val tmpresult = TestResult(
                         ip = ipAddress,
                         regionCode = speed.regionCode,
-                        latency = (speed.delay ?: 0.0).toLong(),
+                        latency = speed.delay,
                         success = true
                     )
 
@@ -509,7 +375,14 @@ class PushIPToServerTestFragment: Fragment() {
     }
 
     private fun updateStatus(message: String) {
-        //tvStatus.text = "状态: $message"
+        // 调用方大多在后台线程，统一切回主线程再更新 UI
+        val tv = tvStatus ?: return
+        val text = "状态: $message"
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            tv.text = text
+        } else {
+            tv.post { tv.text = text }
+        }
     }
 
     data class TestResult(
@@ -583,7 +456,8 @@ class PushIPToServerTestFragment: Fragment() {
                         val ip = parts[0].trim()
                         val delay = parts[1].trim().toLongOrNull() ?: -1
                         val success = parts[2].trim() == "成功"
-                        val regionCode = parts[3].trim() ?: "未知地区"
+                        val regionCode = parts.getOrNull(3)?.trim()?.takeIf { it.isNotEmpty() }
+                            ?: RegionData.LABEL_UNKNOWN
 
                         // 只添加成功且延迟小于阈值的项
                         if (success && delay>=0) {
@@ -640,6 +514,11 @@ class PushIPToServerTestFragment: Fragment() {
             return items.map { it.ip }
         }
 
+        /** 速度（KB/s）高于阈值的条目，按速度从高到低排。 */
+        fun getItemsAtLeast(minKb: Double): List<PushIPToServerTestFragment.ResultItem> {
+            return items.filter { it.delay.toDouble() > minKb }.sortedByDescending { it.delay }
+        }
+
         fun setOnItemClickListener(listener: (String) -> Unit) {
             this.onItemClickListener = listener
         }
@@ -653,7 +532,7 @@ class PushIPToServerTestFragment: Fragment() {
 
             init {
                 itemView.setOnClickListener {
-                    val position = adapterPosition
+                    val position = bindingAdapterPosition
                     if (position != RecyclerView.NO_POSITION) {
                         onItemClickListener?.invoke(items[position].ip)
                     }
@@ -677,10 +556,16 @@ class PushIPToServerTestFragment: Fragment() {
         override fun getItemCount(): Int = items.size
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        // 取消后台任务，避免 Fragment 销毁后任务继续跑
+        viewModelScope.cancel()
+        ioScope.cancel()
+    }
+
     override fun onResume() {
         super.onResume()
-        // 每次切换到这个Tab时，重新加载数据
-        loadSavedUrls()
+        // 切回这个Tab时，列表为空就从上次保存的测速结果恢复
         if(adapter.itemCount<1){
             loadDownloadResultsFromFile()
         }
