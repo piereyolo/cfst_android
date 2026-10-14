@@ -1,613 +1,397 @@
 package com.cloudflare.speedtest.core
 
-import android.content.ClipboardManager
-import android.content.Context
-import android.os.Handler
-import android.os.Looper
+import android.net.Uri
 import android.util.Log
-import android.widget.Toast
-import okhttp3.HttpUrl
+import okhttp3.Dns
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.IOException
-import java.security.SecureRandom
-import java.security.cert.X509Certificate
-import java.util.Collections
-import java.util.concurrent.Executors
-import java.util.concurrent.Future
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicInteger
-import javax.net.ssl.HostnameVerifier
-import javax.net.ssl.SSLContext
-import javax.net.ssl.TrustManager
-import javax.net.ssl.X509TrustManager
-import kotlin.system.measureTimeMillis
-import kotlin.text.ifEmpty
-import okhttp3.Dns
 import java.net.InetAddress
-import java.util.concurrent.TimeoutException
-
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
+import java.security.cert.X509Certificate
 
-
+/**
+ * IP 连通性 / 下载速度测试工具。
+ *
+ * - 地区码 → 中文地区名：[RegionData]（数据在 res/raw/regions.json）
+ * - 「过滤区域」通配符：[RegionMatcher]
+ * - OkHttpClient 复用：[TestClientPool]
+ */
 object IPTestHelper {
 
-    fun getRegionChineseName(code: String): String {
-        return regionMap[code.uppercase()] ?: "未知地区"
-    }
+    private const val TAG = "IPTestHelper"
 
-    // Cloudflare 数据中心地区码映射（部分常见）
-    val regionMap = mapOf(
-        "AAE" to "阿尔及利亚安纳巴",
-        "ABJ" to "科特迪瓦阿比让",
-        "ABQ" to "美国阿尔伯克基",
-        "ACC" to "加纳阿克拉",
-        "ACX" to "中国兴义",
-        "ADB" to "土耳其伊兹密尔",
-        "ADD" to "埃塞俄比亚亚的斯亚贝巴",
-        "ADL" to "澳大利亚阿德莱德",
-        "AGR" to "印度阿格拉",
-        "AKL" to "新西兰奥克兰",
-        "AKX" to "哈萨克斯坦阿克托别",
-        "ALA" to "哈萨克斯坦阿拉木图",
-        "ALG" to "阿尔及利亚阿尔及尔",
-        "AMD" to "印度艾哈迈达巴德",
-        "AMM" to "约旦安曼",
-        "AMS" to "荷兰阿姆斯特丹",
-        "ANC" to "美国安克雷奇",
-        "ARI" to "智利阿里卡",
-        "ARN" to "瑞典斯德哥尔摩",
-        "ARU" to "巴西阿拉萨图巴",
-        "ASK" to "科特迪瓦亚穆苏克罗",
-        "ASU" to "巴拉圭亚松森",
-        "ATH" to "希腊雅典",
-        "ATL" to "美国亚特兰大",
-        "AUS" to "美国奥斯汀",
-        "BAH" to "巴林麦纳麦",
-        "BAQ" to "哥伦比亚巴兰基亚",
-        "BBI" to "印度布巴内斯瓦尔",
-        "BCN" to "西班牙巴塞罗那",
-        "BEG" to "塞尔维亚贝尔格莱德",
-        "BEL" to "巴西贝伦",
-        "BEY" to "黎巴嫩贝鲁特",
-        "BGI" to "巴巴多斯布里奇敦",
-        "BGR" to "美国班戈",
-        "BGW" to "伊拉克巴格达",
-        "BHY" to "中国北海",
-        "BKK" to "泰国曼谷",
-        "BLR" to "印度班加罗尔",
-        "BNA" to "美国纳什维尔",
-        "BNE" to "澳大利亚布里斯班",
-        "BNU" to "巴西布卢梅瑙",
-        "BOD" to "法国波尔多",
-        "BOG" to "哥伦比亚波哥大",
-        "BOM" to "印度孟买",
-        "BOS" to "美国波士顿",
-        "BRU" to "比利时布鲁塞尔",
-        "BSB" to "巴西巴西利亚",
-        "BSR" to "伊拉克巴士拉",
-        "BTS" to "斯洛伐克布拉迪斯拉发",
-        "BUD" to "匈牙利布达佩斯",
-        "BUF" to "美国布法罗",
-        "BWN" to "文莱斯里巴加湾市",
-        "CAI" to "埃及开罗",
-        "CAN" to "中国广州",
-        "CAW" to "巴西坎波斯多斯戈伊塔卡泽斯",
-        "CBR" to "澳大利亚堪培拉",
-        "CCP" to "智利康塞普西翁",
-        "CCU" to "印度加尔各答",
-        "CDG" to "法国巴黎",
-        "CEB" to "菲律宾宿务",
-        "CFC" to "巴西卡卡多尔",
-        "CGB" to "巴西库亚巴",
-        "CGD" to "中国常德",
-        "CGK" to "印度尼西亚雅加达",
-        "CGO" to "中国郑州",
-        "CGP" to "孟加拉国吉大港",
-        "CGY" to "菲律宾卡加延德奥罗",
-        "CHC" to "新西兰基督城",
-        "CJB" to "印度哥印拜陀",
-        "CKG" to "中国重庆",
-        "CLE" to "美国克利夫兰",
-        "CLO" to "哥伦比亚卡利",
-        "CLT" to "美国夏洛特",
-        "CMB" to "斯里兰卡科伦坡",
-        "CMH" to "美国哥伦布",
-        "CNF" to "巴西贝洛奥里藏特",
-        "CNN" to "印度坎努尔",
-        "CNX" to "泰国清迈",
-        "COK" to "印度科钦",
-        "COR" to "阿根廷科尔多瓦",
-        "CPH" to "丹麦哥本哈根",
-        "CPT" to "南非开普敦",
-        "CRK" to "菲律宾塔拉克市",
-        "CSX" to "中国长沙",
-        "CTU" to "中国成都",
-        "CWB" to "巴西库里提巴",
-        "CZL" to "阿尔及利亚康斯坦丁",
-        "CZX" to "中国常州",
-        "DAC" to "孟加拉国达卡",
-        "DAD" to "越南岘港",
-        "DAR" to "坦桑尼亚达累斯萨拉姆",
-        "DEL" to "印度新德里",
-        "DEN" to "美国丹佛",
-        "DFW" to "美国达拉斯",
-        "DKR" to "塞内加尔达喀尔",
-        "DLC" to "中国大连",
-        "DME" to "俄罗斯莫斯科",
-        "DMM" to "沙特阿拉伯达曼",
-        "DOH" to "卡塔尔多哈",
-        "DPS" to "印度尼西亚登巴萨",
-        "DTW" to "美国底特律",
-        "DUB" to "爱尔兰都柏林",
-        "DUR" to "南非德班",
-        "DUS" to "德国杜塞尔多夫",
-        "DXB" to "阿联酋迪拜",
-        "EBB" to "乌干达坎帕拉",
-        "EBL" to "伊拉克埃尔比勒",
-        "EDI" to "英国爱丁堡",
-        "EVN" to "亚美尼亚埃里温",
-        "EWR" to "美国纽瓦克",
-        "EZE" to "阿根廷布宜诺斯艾利斯",
-        "FCO" to "意大利罗马",
-        "FIH" to "刚果民主共和国金沙萨",
-        "FLN" to "巴西弗洛里亚诺波利斯",
-        "FOC" to "中国福州",
-        "FOR" to "巴西福塔莱萨",
-        "FRA" to "德国法兰克福",
-        "FRU" to "吉尔吉斯斯坦比什凯克",
-        "FSD" to "美国苏福尔斯",
-        "FUK" to "日本福冈",
-        "FUO" to "中国佛山",
-        "GBE" to "博茨瓦纳哈博罗内",
-        "GDL" to "墨西哥瓜达拉哈拉",
-        "GEO" to "圭亚那乔治敦",
-        "GIG" to "巴西里约热内卢",
-        "GND" to "格林纳达圣乔治",
-        "GOT" to "瑞典哥德堡",
-        "GRU" to "巴西圣保罗",
-        "GUA" to "危地马拉危地马拉城",
-        "GUM" to "关岛哈加特纳",
-        "GVA" to "瑞士日内瓦",
-        "GYD" to "阿塞拜疆巴库",
-        "GYE" to "厄瓜多尔瓜亚基尔",
-        "GYN" to "巴西戈亚尼亚",
-        "HAK" to "中国海口",
-        "HAM" to "德国汉堡",
-        "HAN" to "越南河内",
-        "HBA" to "澳大利亚霍巴特",
-        "HEL" to "芬兰赫尔辛基",
-        "HFA" to "以色列海法",
-        "HFE" to "中国淮南",
-        "HGH" to "中国绍兴",
-        "HKG" to "中国香港",
-        "HNL" to "美国檀香山",
-        "HRE" to "津巴布韦哈拉雷",
-        "HYD" to "印度海得拉巴",
-        "HYN" to "中国台州",
-        "IAD" to "美国阿什本",
-        "IAH" to "美国休斯顿",
-        "ICN" to "韩国首尔",
-        "IND" to "美国印第安纳波利斯",
-        "ISB" to "巴基斯坦伊斯兰堡",
-        "IST" to "土耳其伊斯坦布尔",
-        "ISU" to "伊拉克苏莱曼尼亚",
-        "ITJ" to "巴西伊塔雅伊",
-        "IXC" to "印度昌迪加尔",
-        "JAX" to "美国杰克逊维尔",
-        "JDO" to "巴西北茹阿泽鲁",
-        "JED" to "沙特阿拉伯吉达",
-        "JHB" to "马来西亚新山",
-        "JIB" to "吉布提市",
-        "JNB" to "南非约翰内斯堡",
-        "JOG" to "印度尼西亚日惹",
-        "JOI" to "巴西若因维利",
-        "JRG" to "印度桑巴尔普尔",
-        "JSR" to "孟加拉国杰索尔",
-        "JXG" to "中国嘉兴",
-        "KBP" to "乌克兰基辅",
-        "KCH" to "马来西亚古晋",
-        "KEF" to "冰岛雷克雅未克",
-        "KGL" to "卢旺达基加利",
-        "KHH" to "中国台湾高雄",
-        "KHI" to "巴基斯坦卡拉奇",
-        "KHN" to "中国新余市",
-        "KIN" to "牙买加金斯敦",
-        "KIV" to "摩尔多瓦基希讷乌",
-        "KIX" to "日本大阪",
-        "KJA" to "俄罗斯克拉斯诺亚尔斯克",
-        "KMG" to "中国昆明",
-        "KNU" to "印度坎普尔",
-        "KTM" to "尼泊尔加德满都",
-        "KUL" to "马来西亚吉隆坡",
-        "KWE" to "中国贵阳",
-        "KWI" to "科威特科威特城",
-        "LAD" to "安哥拉罗安达",
-        "LAS" to "美国拉斯维加斯",
-        "LAX" to "美国洛杉矶",
-        "LCA" to "塞浦路斯尼科西亚",
-        "LED" to "俄罗斯圣彼得堡",
-        "LHE" to "巴基斯坦拉合尔",
-        "LHR" to "英国伦敦",
-        "LHW" to "中国兰州",
-        "LIM" to "秘鲁利马",
-        "LIS" to "葡萄牙里斯本",
-        "LJU" to "斯洛文尼亚卢布尔雅那",
-        "LLK" to "阿塞拜疆阿斯塔拉",
-        "LLW" to "马拉维利隆圭",
-        "LOCAL" to "本地网络",
-        "LOS" to "尼日利亚拉各斯",
-        "LPB" to "玻利维亚拉巴斯",
-        "LUN" to "赞比亚卢萨卡",
-        "LUX" to "卢森堡卢森堡市",
-        "LYA" to "中国洛阳",
-        "LYS" to "法国里昂",
-        "MAA" to "印度钦奈",
-        "MAD" to "西班牙马德里",
-        "MAN" to "英国曼彻斯特",
-        "MAO" to "巴西马瑙斯",
-        "MBA" to "肯尼亚蒙巴萨",
-        "MCI" to "美国堪萨斯城",
-        "MCT" to "阿曼马斯喀特",
-        "MDE" to "哥伦比亚麦德林",
-        "MEL" to "澳大利亚墨尔本",
-        "MEM" to "美国孟菲斯",
-        "MEX" to "墨西哥墨西哥城",
-        "MFE" to "美国麦卡伦",
-        "MFM" to "中国澳门",
-        "MIA" to "美国迈阿密",
-        "MLA" to "马耳他圣韦内拉",
-        "MLE" to "马累, 马尔代夫",
-        "MLG" to "印度尼西亚玛琅",
-        "MNL" to "菲律宾马尼拉",
-        "MPM" to "莫桑比克马普托",
-        "MRS" to "法国马赛",
-        "MRU" to "毛里求斯路易港",
-        "MSP" to "美国明尼阿波利斯",
-        "MSQ" to "白俄罗斯明斯克",
-        "MUC" to "德国慕尼黑",
-        "MXP" to "意大利米兰",
-        "NAG" to "印度那格浦尔",
-        "NBO" to "肯尼亚内罗毕",
-        "NJF" to "伊拉克纳杰夫",
-        "NNG" to "中国南宁",
-        "NOU" to "新喀里多尼亚努美阿",
-        "NQN" to "阿根廷内乌肯",
-        "NQZ" to "哈萨克斯坦阿斯塔纳",
-        "NRT" to "日本东京",
-        "NVT" to "巴西蒂姆博",
-        "OKA" to "日本那霸",
-        "OKC" to "美国俄克拉荷马城",
-        "OMA" to "美国奥马哈",
-        "ORD" to "美国芝加哥",
-        "ORF" to "美国诺福克",
-        "ORK" to "爱尔兰科克",
-        "ORN" to "阿尔及利亚奥兰",
-        "OSL" to "挪威奥斯陆",
-        "OTP" to "罗马尼亚布加勒斯特",
-        "OUA" to "布基纳法索瓦加杜古",
-        "PAT" to "印度巴特那",
-        "PBH" to "不丹廷布",
-        "PBM" to "苏里南帕拉马里博",
-        "PDX" to "美国波特兰",
-        "PER" to "澳大利亚珀斯",
-        "PHL" to "美国费城",
-        "PHX" to "美国菲尼克斯",
-        "PIT" to "美国匹兹堡",
-        "PKX" to "中国廊坊",
-        "PMO" to "意大利巴勒莫",
-        "PMW" to "巴西帕尔马斯",
-        "PNH" to "柬埔寨金边",
-        "PNQ" to "印度浦那",
-        "POA" to "巴西阿雷格里港",
-        "POS" to "特立尼达和多巴哥西班牙港",
-        "PPT" to "法属波利尼西亚塔希提",
-        "PRG" to "捷克共和国布拉格",
-        "PTY" to "巴拿马巴拿马城",
-        "QRO" to "墨西哥克雷塔罗",
-        "QWJ" to "巴西阿美利卡纳",
-        "RAO" to "巴西里贝朗普雷图",
-        "RDU" to "美国达勒姆",
-        "REC" to "巴西累西腓",
-        "RIC" to "美国里士满",
-        "RIX" to "拉脱维亚里加",
-        "RUH" to "沙特阿拉伯利雅得",
-        "RUN" to "法国留尼汪",
-        "SAN" to "美国圣迭戈",
-        "SAP" to "洪都拉斯圣佩德罗苏拉",
-        "SAT" to "美国圣安东尼奥",
-        "SCL" to "智利圣地亚哥",
-        "SDQ" to "多米尼加共和国圣多明各",
-        "SEA" to "美国西雅图",
-        "SFO" to "美国旧金山",
-        "SGN" to "越南胡志明市",
-        "SHA" to "中国上海",
-        "SIN" to "新加坡",
-        "SJC" to "美国圣何塞",
-        "SJK" to "巴西圣若泽杜斯坎普斯",
-        "SJO" to "哥斯达黎加圣何塞",
-        "SJP" to "巴西圣若泽杜里奥普雷图",
-        "SJU" to "波多黎各圣胡安",
-        "SJW" to "中国衡水",
-        "SKG" to "希腊塞萨洛尼基",
-        "SKP" to "北马其顿斯科普里",
-        "SLC" to "美国盐湖城",
-        "SMF" to "美国萨克拉门托",
-        "SOD" to "巴西索罗卡巴",
-        "SOF" to "保加利亚索非亚",
-        "SSA" to "巴西萨尔瓦多",
-        "STI" to "多米尼加共和国圣地亚哥德洛斯卡巴耶罗斯",
-        "STL" to "美国圣路易斯",
-        "STR" to "德国斯图加特",
-        "SUV" to "斐济苏瓦",
-        "SVX" to "俄罗斯叶卡捷琳堡",
-        "SYD" to "澳大利亚悉尼",
-        "SZX" to "中国深圳",
-        "TAO" to "中国青岛",
-        "TAS" to "乌兹别克斯坦塔什干",
-        "TBS" to "格鲁吉亚第比利斯",
-        "TEN" to "中国铜仁",
-        "TGU" to "洪都拉斯特古西加尔巴",
-        "TIA" to "阿尔巴尼亚地拉那",
-        "TLH" to "美国塔拉哈西",
-        "TLL" to "爱沙尼亚塔林",
-        "TLV" to "以色列特拉维夫",
-        "TNA" to "中国济南",
-        "TNR" to "马达加斯加塔那那利佛",
-        "TPA" to "美国坦帕",
-        "TPE" to "中国台北",
-        "TSN" to "中国天津",
-        "TUN" to "突尼斯突尼斯",
-        "TXL" to "德国柏林",
-        "TYN" to "中国阳泉",
-        "UDI" to "巴西乌贝兰迪亚",
-        "UIO" to "厄瓜多尔基多",
-        "ULN" to "蒙古乌兰巴托",
-        "URT" to "泰国素叻他尼",
-        "VCP" to "巴西坎皮纳斯",
-        "VIE" to "奥地利维也纳",
-        "VIX" to "巴西维多利亚",
-        "VNO" to "立陶宛维尔纽斯",
-        "VTE" to "老挝万象",
-        "WAW" to "波兰华沙",
-        "WDH" to "纳米比亚温得和克",
-        "WHU" to "中国芜湖",
-        "WLG" to "新西兰惠灵顿",
-        "WRO" to "波兰弗罗茨瓦夫",
-        "XAP" to "巴西沙佩科",
-        "XFN" to "中国襄阳",
-        "XIY" to "中国宝鸡",
-        "XNH" to "伊拉克纳西里耶",
-        "XNN" to "中国西宁",
-        "YHZ" to "加拿大哈利法克斯",
-        "YOW" to "加拿大渥太华",
-        "YUL" to "加拿大蒙特利尔",
-        "YVR" to "加拿大温哥华",
-        "YWG" to "加拿大温尼伯",
-        "YXE" to "加拿大萨斯卡通",
-        "YYC" to "加拿大卡尔加里",
-        "YYZ" to "加拿大多伦多",
-        "ZAG" to "克罗地亚萨格勒布",
-        "ZDM" to "拉马拉",
-        "ZGN" to "中国中山",
-        "ZRH" to "瑞士苏黎世"
-    )
+    /** 默认测速端口（https 默认端口）。 */
+    const val DEFAULT_TARGET_PORT = 443
+    private const val DOWNLOAD_HOST = "speed.cloudflare.com"
+    private const val DOWNLOAD_PATH = "/__down?bytes=40485760"
 
-    fun extractRegionCode1(ray: String): String {
-        return if (ray.contains("-")) {
-            ray.split("-").last()
-        } else {
-            // 如果没有连字符，可能是纯代码或无效格式
-            if (ray.length <= 4 && ray.all { it.isLetter() }) ray else "UNKNOWN"
+    // ==================== 探测目标 ====================
+
+    /**
+     * 探测目标：连目标 IP 时「伪装成访问哪个网站」。
+     *
+     * 这正是 VLESS/XHTTP 的三要素：SNI = [host]、端口 = [port]、路径 = [path]。
+     * OkHttp 会自动用 [host] 作为 TLS SNI，所以直接测出来的结果就是 XHTTP web 模式
+     * 真正需要的那个握手过程。
+     */
+    data class ProbeTarget(
+        val host: String,
+        val port: Int,
+        val path: String,
+        val alpn: List<String> = emptyList(),
+        val protocol: String = ""
+    ) {
+        override fun toString(): String {
+            val p = if (path.isEmpty() || path == "/") "" else path
+            return "$host:$port$p"
         }
     }
+
+    /** 默认目标：Cloudflare 官方测速端点。 */
+    val DEFAULT_PROBE_TARGET: ProbeTarget = ProbeTarget(DOWNLOAD_HOST, DEFAULT_TARGET_PORT, DOWNLOAD_PATH)
+
+    /** 用指定端口跑默认的 Cloudflare 测速目标（配合「IP测试」页的端口配置）。 */
+    fun defaultTargetWithPort(port: Int): ProbeTarget = ProbeTarget(DOWNLOAD_HOST, port, DOWNLOAD_PATH)
+
+    /** 按 [ProbeTarget] 拼 URL；443 省略端口号。 */
+    fun buildProbeUrl(target: ProbeTarget): String {
+        val p = when {
+            target.path.isEmpty() -> "/"
+            target.path.startsWith("/") -> target.path
+            else -> "/${target.path}"
+        }
+        val portPart = if (target.port == DEFAULT_TARGET_PORT) "" else ":${target.port}"
+        return "https://${target.host}$portPart$p"
+    }
+
+    /**
+     * 从 VLESS / Trojan / Shadowsocks 等配置串里提取「伪装目标」参数。
+     *
+     * `vless://uuid@162.159.140.69:2096?security=tls&alpn=h2%2Chttp%2F1.1&type=xhttp&host=ui.wiofey.qzz.io&path=%2F&mode=auto#tag`
+     * → `ProbeTarget(host="ui.wiofey.qzz.io", port=2096, path="/", alpn=["h2","http/1.1"], protocol="vless")`
+     *
+     * 注意 `@` 后面的 `ip:port` 是「连哪个节点」，`host=` 才是「伪装成哪个网站」，
+     * XHTTP 要探测的是后者。也接受 `https://host:port/path` 或 `host:port/path`。
+     * 解析失败返回 null。
+     */
+    fun parseProbeTarget(text: String): ProbeTarget? {
+        if (text.isBlank()) return null
+        return try {
+            val noFragment = text.substringBefore('#').trim()
+            val schemeIdx = noFragment.indexOf("://")
+            if (schemeIdx < 0) return parseHostPortPath(noFragment)
+
+            val scheme = noFragment.substring(0, schemeIdx).lowercase()
+            val rest = noFragment.substring(schemeIdx + 3)
+            val qIdx = rest.indexOf('?')
+            val authPart = if (qIdx >= 0) rest.substring(0, qIdx) else rest
+            val params = if (qIdx >= 0) parseQuery(rest.substring(qIdx + 1)) else emptyMap()
+
+            // 去掉 userinfo（uuid 那一段）
+            val authority = if ('@' in authPart) authPart.substringAfterLast('@') else authPart
+            val slash = authority.indexOf('/')
+            val hostPort = if (slash >= 0) authority.substring(0, slash) else authority
+            val inlinePath = if (slash >= 0) authority.substring(slash) else ""
+
+            val authHost = hostPort.substringBefore(':')
+            val authPort = hostPort.substringAfter(':', "").toIntOrNull()
+
+            val host = params["host"]?.ifBlank { null } ?: authHost.ifBlank { return null }
+            val port = params["port"]?.toIntOrNull() ?: authPort ?: DEFAULT_TARGET_PORT
+            val path = (params["path"] ?: inlinePath).ifBlank { "/" }
+            val alpn = params["alpn"]?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }
+                ?: emptyList()
+
+            ProbeTarget(host, port, path, alpn, scheme)
+        } catch (e: Exception) {
+            Log.e(TAG, "解析探测目标失败: ${e.message}")
+            null
+        }
+    }
+
+    /** 解析 `host:port/path`（无 scheme）。 */
+    private fun parseHostPortPath(s: String): ProbeTarget? {
+        val slash = s.indexOf('/')
+        val hostPort = if (slash >= 0) s.substring(0, slash) else s
+        val path = if (slash >= 0) s.substring(slash) else "/"
+        val host = hostPort.substringBefore(':').trim()
+        if (host.isEmpty()) return null
+        val port = hostPort.substringAfter(':', "").toIntOrNull() ?: DEFAULT_TARGET_PORT
+        return ProbeTarget(host, port, path)
+    }
+
+    private fun parseQuery(q: String): Map<String, String> {
+        if (q.isEmpty()) return emptyMap()
+        return q.split('&').mapNotNull { kv ->
+            val i = kv.indexOf('=')
+            if (i <= 0) return@mapNotNull null
+            Uri.decode(kv.substring(0, i)) to Uri.decode(kv.substring(i + 1))
+        }.toMap()
+    }
+
+    /** 地区码 → 中文地区名（未知返回 `未知地区`）。 */
+    fun getRegionChineseName(code: String): String = RegionData.labelOf(code)
+
+    /** 从 CF-RAY 头里取区域码（兼容旧调用）。 */
+    fun extractRegionCode1(ray: String?): String = RegionData.regionCodeFromRay(ray)
+
+    /** 把区域码拼成界面上展示的标签，如 `LAX:美国洛杉矶`。 */
+    fun formatRegionLabel(code: String): String {
+        val c = code.trim()
+        if (c.isEmpty() || c.equals(RegionData.CODE_UNKNOWN, true)) return RegionData.LABEL_UNKNOWN
+        return "$c:${RegionData.labelOf(c)}"
+    }
+
+    /** 把测试流量强制指向指定 IP（绕过 DNS）。 */
     class CustomDns(private val targetDomain: String, private val targetIp: String) : Dns {
-        override fun lookup(hostname: String): List<InetAddress> {
-            return if (hostname == targetDomain) {
-                // 将目标域名解析为指定IP
+        override fun lookup(hostname: String): List<InetAddress> =
+            if (hostname == targetDomain) {
                 listOf(InetAddress.getByName(targetIp))
             } else {
-                // 其他域名使用系统DNS
                 Dns.SYSTEM.lookup(hostname)
             }
-        }
-    }
-    fun createTestClient(hostname:String,ip:String,timeoutSeconds: Int = 6): OkHttpClient {
-        return try {
-            // 创建信任所有证书的TrustManager
-            val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
-                override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
-                override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
-                override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
-            })
-
-            // 安装信任所有证书的SSLContext
-            val sslContext = SSLContext.getInstance("SSL")
-            sslContext.init(null, trustAllCerts, SecureRandom())
-
-            // 创建不验证主机名的HostnameVerifier
-            val hostnameVerifier = HostnameVerifier { _, _ -> true }
-
-            OkHttpClient.Builder()
-                .sslSocketFactory(sslContext.socketFactory, trustAllCerts[0] as X509TrustManager)
-                .hostnameVerifier(hostnameVerifier)
-                .connectTimeout(timeoutSeconds.toLong(), TimeUnit.SECONDS)
-                .readTimeout(timeoutSeconds.toLong(), TimeUnit.SECONDS)
-                .writeTimeout(timeoutSeconds.toLong(), TimeUnit.SECONDS)
-                .callTimeout((timeoutSeconds + 1).toLong(), TimeUnit.SECONDS)
-                .retryOnConnectionFailure(false)
-                .dns(CustomDns(hostname,ip))
-                .build()
-        } catch (e: Exception) {
-            // 如果SSL初始化失败，创建普通客户端
-            OkHttpClient.Builder()
-                .connectTimeout(timeoutSeconds.toLong(), TimeUnit.SECONDS)
-                .readTimeout(timeoutSeconds.toLong(), TimeUnit.SECONDS)
-                .writeTimeout(timeoutSeconds.toLong(), TimeUnit.SECONDS)
-                .callTimeout((timeoutSeconds + 1).toLong(), TimeUnit.SECONDS)
-                .retryOnConnectionFailure(false)
-                .build()
-        }
     }
 
-    data class TestResult(
-        val ip: String,
-        val success: Boolean,
-        val delay: Long,
-        val statusCode: Int = -1
-    ) : Comparable<TestResult> {
-        override fun compareTo(other: TestResult): Int {
-            // 排序规则：成功的在前，失败的在后；成功的按延迟升序排序
-            return when {
-                this.success && !other.success -> -1
-                !this.success && other.success -> 1
-                this.success && other.success -> this.delay.compareTo(other.delay)
-                else -> 0 // 两个都失败，保持原顺序
-            }
-        }
-    }
+    /**
+     * 构造测试客户端。TLS 上下文、连接池、调度器都由 [TestClientPool] 共享，
+     * 只有 DNS（目标 IP）按调用参数区分。
+     */
+    fun createTestClient(hostname: String, ip: String, timeoutSeconds: Int = 6): OkHttpClient =
+        TestClientPool.newBuilder(CustomDns(hostname, ip))
+            .connectTimeout(timeoutSeconds.toLong(), TimeUnit.SECONDS)
+            .readTimeout(timeoutSeconds.toLong(), TimeUnit.SECONDS)
+            .writeTimeout(timeoutSeconds.toLong(), TimeUnit.SECONDS)
+            .callTimeout((timeoutSeconds + 1).toLong(), TimeUnit.SECONDS)
+            .build()
 
     data class TestDownloadResult(
         val ip: String,
         val success: Boolean,
-        val delay: Long,
-        val regionCode: String = "未知地区"
+        val delay: Long,          // 单位 KB/s（沿用旧字段含义）
+        val regionCode: String,   // 形如 `LAX:美国洛杉矶`
+        val httpStatus: Int = -1, // 目标站点的 HTTP 状态码；-1 表示没拿到响应
+        val alpn: String? = null, // 协商出的协议（h2 / http1.1）
+        val certSubject: String? = null
     )
 
-    fun testSingleIpSync(
-        ip: String,
-        timeoutSeconds: Int = 6,
-        targetUrl: String = "https://www.cloudflare-cn.com"
-    ): TestResult {
-        val url = targetUrl.toHttpUrlOrNull() ?: return TestResult(ip, false, -1)
-
-        val hostname = url.host  // 使用 .host 替代 .host()
-
-        val request = Request.Builder()
-            .url(targetUrl)
-            .head() // 使用HEAD方法
-            .header("Host", hostname)
-            .header("Connection", "close")
-            .header("User-Agent", "Mozilla/5.0")
-            .build()
-
-        val client = createTestClient(hostname,ip,timeoutSeconds)
-
-        return try {
-            // 测试连接时间
-            val startTime = System.nanoTime()
-            // 重新获取状态码
-            val response = client.newCall(request).execute()
-
-            val statusCode = response.code
-            response.close()
-
-            val delayMs =((System.nanoTime()-startTime)/1_000_000).toLong()
-
-
-            if (statusCode in listOf(200, 204, 301, 302, 307, 308,421,403)) {
-            TestResult(ip, true, delayMs, statusCode)
-            } else {
-                TestResult(ip, false, -1, statusCode)
-            }
-        } catch (e: IOException) {
-            TestResult(ip, false, -1)
-        } catch (e: Exception) {
-            TestResult(ip, false, -1)
-        } finally {
-            client.dispatcher.executorService.shutdown()
-            client.connectionPool.evictAll()
-        }
-    }
-
-
+    /**
+     * 下载测试：强制走 [ip]，统计 KB/s 并带上区域标签。
+     *
+     * [target] 决定「伪装成访问哪个网站」。默认是 Cloudflare 官方测速端点；
+     * 传进一个从 VLESS 链接解析出来的 [ProbeTarget] 时，SNI / 端口 / 路径 /
+     * Host 头会全部换成代理配置里那套，同时返回 HTTP 状态码、ALPN、证书，
+     * 可以直接判断这个 IP 是不是在同一个 Cloudflare 站点、路径是否存在。
+     *
+     * 直接同步执行（调用方已在后台线程），不再额外起一个单线程池 + Future。
+     */
     fun downloadWithSpeedTracking(
         ip: String,
         timeoutSeconds: Long,
-        targetUrl: String = "https://speed.cloudflare.com/__down?bytes=40485760"
+        target: ProbeTarget = DEFAULT_PROBE_TARGET
     ): TestDownloadResult {
-        val url = targetUrl.toHttpUrlOrNull() ?: return TestDownloadResult(ip,false,0,"未知地区")
+        val url = buildProbeUrl(target).toHttpUrlOrNull() ?: return fail(ip)
         val hostname = url.host
-        val client = createTestClient(hostname, ip,(timeoutSeconds+5).toInt())
+        // 非默认端口按 RFC 要求在 Host 头里带上端口
+        val hostHeader = if (url.port == DEFAULT_TARGET_PORT) hostname else "$hostname:${url.port}"
 
         val request = Request.Builder()
-            .url(targetUrl)
-            .header("Host", hostname)
+            .url(url)
+            .header("Host", hostHeader)
             .header("Connection", "keep-alive")
             .header("User-Agent", "Mozilla/5.0")
             .build()
 
+        val client = createTestClient(hostname, ip, (timeoutSeconds + 5).toInt())
+
         val startTime = System.nanoTime()
         val totalBytesDownloaded = AtomicLong(0)
-        val executor = Executors.newSingleThreadExecutor()
+        var regionLabel = RegionData.LABEL_UNKNOWN
+        var httpStatus = -1
+        var alpn: String? = null
+        var certSubject: String? = null
 
         try {
             val call = client.newCall(request)
-            val future = executor.submit<TestDownloadResult?> {
-                try {
-                    var cfRayCodeChinese:String="未知地区"
-                    val response = call.execute()
-                    response.use { // 使用use确保资源自动关闭
-                        val inputStream = response.body?.byteStream() ?: return@submit null
-                        val buffer = ByteArray(20480)
-                        var bytesRead: Int
+            call.execute().use { response ->
+                httpStatus = response.code
+                alpn = (response.networkResponse?.protocol ?: response.protocol)?.toString()
+                certSubject = (response.handshake?.peerCertificates?.getOrNull(0) as? X509Certificate)
+                    ?.subjectDN?.name
+                if (response.isSuccessful) {
+                    val cfRayCode = extractRegionCode1(response.headers["CF-RAY"])
+                    regionLabel = if (cfRayCode.isNotEmpty()) formatRegionLabel(cfRayCode)
+                        else RegionData.LABEL_UNKNOWN
+                }
 
-
-
-                        if (it.isSuccessful) {
-                            val cfRay = it.headers["CF-RAY"]
-
-                            val cfRayCode = extractRegionCode1(cfRay.toString())
-
-                            if(cfRayCode.isNotEmpty()){
-                                cfRayCodeChinese = cfRayCode+":"+getRegionChineseName(cfRayCode)
-                            }
-
-                        }
-
-                        while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                            totalBytesDownloaded.addAndGet(bytesRead.toLong())
-                            val elapsedSec = (System.nanoTime() - startTime) / 1_000_000_000.0
-
-                            // 提前检查超时
-                            if (elapsedSec >= timeoutSeconds) {
-                                println("Download timed out after $timeoutSeconds seconds.")
-                                break
-                            }
-                        }
+                response.body?.byteStream()?.use { inputStream ->
+                    val buffer = ByteArray(20480)
+                    var bytesRead: Int
+                    while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                        totalBytesDownloaded.addAndGet(bytesRead.toLong())
+                        val elapsedSec = (System.nanoTime() - startTime) / 1_000_000_000.0
+                        if (elapsedSec >= timeoutSeconds) break
                     }
-
-                    // 计算平均下载速度
-                    val totalBytes = totalBytesDownloaded.get()
-                    val totalTimeSec = (System.nanoTime() - startTime) / 1_000_000_000.0
-
-                    if (totalTimeSec > 0) {
-                        TestDownloadResult(ip,true,(totalBytes / 1024.0 / totalTimeSec).toLong(),cfRayCodeChinese)
-
-                    } else {
-                        TestDownloadResult(ip,false,0,cfRayCodeChinese)
-                    }
-                } catch (e: IOException) {
-                    println("Download failed with exception: ${e.message}")
-                    TestDownloadResult(ip,false,0,"未知地区")
+                } ?: run {
+                    Log.w(TAG, "响应体为空: $ip")
                 }
             }
 
-            // 使用future.get的超时控制，而不是Thread.sleep
-            return try {
-                future.get(timeoutSeconds+5, TimeUnit.SECONDS)
-            } catch (e: TimeoutException) {
-                println("Download timed out after $timeoutSeconds seconds.")
-                call.cancel()
-                TestDownloadResult(ip,false,0,"未知地区1")
-            } catch (e: Exception) {
-                println("Download failed: ${e.message}")
-                TestDownloadResult(ip,false,0,"未知地区2")
+            val totalBytes = totalBytesDownloaded.get()
+            val totalTimeSec = (System.nanoTime() - startTime) / 1_000_000_000.0
+            if (totalTimeSec > 0 && totalBytes > 0) {
+                return TestDownloadResult(
+                    ip, true, (totalBytes / 1024.0 / totalTimeSec).toLong(),
+                    regionLabel, httpStatus, alpn, certSubject
+                )
             }
-        } finally {
-            executor.shutdown()
+            return TestDownloadResult(ip, false, 0, regionLabel, httpStatus, alpn, certSubject)
+        } catch (e: IOException) {
+            Log.w(TAG, "下载失败: $ip - ${e.message}")
+            return fail(ip)
+        } catch (e: Exception) {
+            Log.e(TAG, "下载异常: $ip", e)
+            return fail(ip)
         }
     }
 
+    private fun fail(ip: String) = TestDownloadResult(ip, false, 0, RegionData.LABEL_UNKNOWN)
+
+    /**
+     * 把探测结果拼成一行可读文本，例如：
+     * `LAX:美国洛杉矶 | HTTP 200 | h2 | 证书 ui.wiofey.qzz.io`
+     *
+     * HTTP 状态码 + ALPN + 证书是判断「这个 IP 能不能当 XHTTP 目标」的直接依据。
+     */
+    fun formatProbeResult(r: TestDownloadResult): String {
+        val sb = StringBuilder(r.regionCode)
+        if (r.httpStatus > 0) sb.append(" | HTTP ").append(r.httpStatus)
+        if (!r.alpn.isNullOrEmpty()) sb.append(" | ").append(r.alpn)
+        val cn = r.certSubject?.substringAfter("CN=", "")?.substringBefore(',')?.trim()
+        if (!cn.isNullOrEmpty()) sb.append(" | 证书 ").append(cn)
+        return sb.toString()
+    }
+
+    // ==================== 端点可用性验证 ====================
+
+    /** 一个 IP 能不能真的当 [ProbeTarget] 的代理端点用。 */
+    data class EndpointCheck(
+        val ip: String,
+        val ok: Boolean,        // true = 通过过滤（足够多次拿到 HTTP 响应）
+        val httpStatus: Int,    // -1 = 最后一次没拿到响应
+        val alpn: String?,
+        val certSubject: String?,
+        val regionCode: String,
+        val passCount: Int,     // 共 [total] 次里拿到 HTTP 响应的次数
+        val total: Int,
+        val message: String
+    )
+
+    /**
+     * 快速验证一个 IP 是否真的能当 [target] 的代理端点。
+     *
+     * 只取响应头、不下载响应体，几百毫秒级，适合对几百个 IP 批量跑。
+     *
+     * **为什么不能拿 speed.cloudflare.com 的测速结果代替这一步**：
+     * `speed.cloudflare.com` 是 Cloudflare 自己的一个 zone，覆盖面比一般用户 zone 广得多。
+     * 一个 IP 能给它跑出 3MB/s，只说明「这是个活着的 CF 边缘节点」，
+     * **不代表它在你自己的 zone 里**。差集里那些 IP 就是「延迟低、测速快、
+     * 换进链接却没网」的假阳性来源。只有拿**你自己的 host:port/path** 测到
+     * 2xx + h2，才能确认它在你的 zone 内。
+     */
+    fun verifyEndpoint(
+        ip: String,
+        target: ProbeTarget,
+        timeoutSeconds: Long = 6,
+        attempts: Int = 3,
+        minPass: Int = 2
+    ): EndpointCheck {
+        val url = buildProbeUrl(target).toHttpUrlOrNull()
+            ?: return EndpointCheck(ip, false, -1, null, null, RegionData.LABEL_UNKNOWN, 0, attempts, "目标URL非法")
+
+        val hostname = url.host
+        val hostHeader = if (url.port == DEFAULT_TARGET_PORT) hostname else "$hostname:${url.port}"
+
+        val request = Request.Builder()
+            .url(url)
+            .header("Host", hostHeader)
+            .header("User-Agent", "Mozilla/5.0")
+            .header("Connection", "close")
+            .build()
+
+        // 判定标准（对 Cloudflare 边缘 IP 分档，这是关键）：
+        //
+        //   2xx / 3xx / 4xx  → CF 认这个 Host，**而且真的通到了你的源站**
+        //                      （404/403/405 都是源站真的回了 HTTP 响应，只是路径不对）
+        //                      → CF→源站这条链路是通的，XHTTP 走这个 IP 就能通 → 可用
+        //
+        //   5xx              → 链路上有断点，换进 VLESS 链接照样不通 → 不可用
+        //                      521/522/524 = CF 连不上你源站的 443（源站挂了 / 防火墙没放行 CF）
+        //                      525/526     = CF 到源站的 TLS 握手失败
+        //                      523/530     = CF 根本不认这个域名（没开小黄云 / 记录没配好）
+        //
+        //   -1               → 连接被重置或超时（GFW 干扰，或这个 IP 已下线）→ 不可用
+        //
+        // 521 是最容易误判的：它证明 IP 在你 zone 内，看着很"可用"，
+        // 但它同时说明 CF→源站是断的，实际代理必挂，必须按不可用处理。
+        //
+        // 多次探测是因为对 CF 的干扰是「按 Host/SNI 粒度」的：同一个 IP 可能对
+        // speed.cloudflare.com 稳定放行，对你的域名却间歇性重置。
+        // 每次新建 client 强制走全新 TCP+TLS 握手，避免连接复用掩盖抖动。
+        val n = attempts.coerceAtLeast(1)
+        val need = minPass.coerceIn(1, n)
+        var passCount = 0
+        var status = -1
+        var alpn: String? = null
+        var cert: String? = null
+        var region = RegionData.LABEL_UNKNOWN
+
+        for (i in 0 until n) {
+            val client = createTestClient(hostname, ip, timeoutSeconds.toInt())
+            try {
+                client.newCall(request).execute().use { r ->
+                    status = r.code
+                    alpn = (r.networkResponse?.protocol ?: r.protocol)?.toString()
+                    cert = (r.handshake?.peerCertificates?.getOrNull(0) as? X509Certificate)
+                        ?.subjectDN?.name
+                    val c = extractRegionCode1(r.headers["CF-RAY"])
+                    region = if (c.isNotEmpty()) formatRegionLabel(c) else RegionData.LABEL_UNKNOWN
+                    // 只有源站真的回了 HTTP（2xx/3xx/4xx）才算这次通
+                    if (status in 200..499) passCount++
+                }
+            } catch (e: IOException) {
+                status = -1
+            } catch (e: Exception) {
+                status = -1
+            }
+        }
+
+        return EndpointCheck(
+            ip, passCount >= need, status, alpn, cert, region, passCount, n,
+            "$passCount/$n 通｜" + endpointMessage(status, alpn, n, passCount)
+        )
+    }
+
+    private fun endpointMessage(status: Int, alpn: String?, total: Int, pass: Int): String {
+        val stab = when {
+            pass == total -> "稳定"
+            pass > 0 -> "抖动"
+            else -> "无响应"
+        }
+        val base = when (status) {
+            -1 -> if (pass == 0) "连接被重置或超时" else "最后几次连接失败"
+            521 -> "不可用：CF连不上你源站443（源站挂了/防火墙没放行CF）"
+            522 -> "不可用：CF连你源站超时"
+            524 -> "不可用：CF连上源站但没等到响应"
+            525 -> "不可用：CF到源站TLS握手失败"
+            526 -> "不可用：源站证书无效"
+            523 -> "不可用：CF不认这个域名"
+            530 -> "不可用：CF不认这个域名"
+            else -> if (status in 200..499) "可用：源站有响应（HTTP $status）" else "HTTP $status"
+        }
+        val proto = if (alpn == "http/1.1") "｜仅http/1.1" else ""
+        return "$stab｜$base$proto"
+    }
 }
