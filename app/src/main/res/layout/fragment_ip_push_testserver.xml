@@ -7,47 +7,72 @@
     android:padding="16dp"
     android:keepScreenOn="true">
 
-    <!-- 第一个网址输入框 -->
+    <!-- 节点链接：[[AABB]] 占位整个 IP，会被完整 IP 替换 -->
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="网址1:"
+        android:text="节点链接:"
         android:textSize="14sp"
         android:textStyle="bold"
         android:layout_marginBottom="4dp" />
 
     <EditText
-        android:id="@+id/etUrl1"
+        android:id="@+id/etNodeLink"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="post请求用的"
-        android:inputType="textUri"
+        android:maxLines="1"
+        android:hint="节点链接"
+        android:padding="12dp"
+        android:layout_marginBottom="12dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="最低速度 (KB/s):"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="4dp" />
+
+    <EditText
+        android:id="@+id/etMinKb"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="只导出速度高于这个值的IP，0 表示全导"
+        android:text="0"
+        android:inputType="numberDecimal"
         android:singleLine="true"
         android:maxLines="1"
-        android:ellipsize="end"
         android:padding="12dp"
         android:layout_marginBottom="16dp" />
 
-    <!-- 第二个网址输入框 -->
+    <!-- 探测目标 -->
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="网址2:"
+        android:text="探测目标 (VLESS/Trojan 链接 或 host:port/path):"
         android:textSize="14sp"
         android:textStyle="bold"
         android:layout_marginBottom="4dp" />
 
     <EditText
-        android:id="@+id/etUrl2"
+        android:id="@+id/etProbeTarget"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="GetTestResult用的"
+        android:hint="留空则测 speed.cloudflare.com"
         android:inputType="textUri"
         android:singleLine="true"
         android:maxLines="1"
         android:ellipsize="end"
         android:padding="12dp"
-        android:layout_marginBottom="24dp" />
+        android:layout_marginBottom="6dp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp"
+        android:text="粘贴代理链接后，「本地下载测速」会用它里面的 host/port/path 去访问目标 IP，并返回 HTTP 状态码、ALPN、证书。用来判断这个 IP 是否在同一个 Cloudflare 站点、路径是否存在"
+        android:textSize="11sp"
+        android:textColor="#888888" />
 
     <!-- 按钮容器（水平排列） -->
     <LinearLayout
@@ -57,14 +82,16 @@
         android:weightSum="2"
         android:layout_marginBottom="2dp">
 
-        <!-- 保存网址按钮 -->
+        <!-- 生成链接按钮 -->
         <Button
-            android:id="@+id/btnSaveUrls"
+            android:id="@+id/btnExportLinks"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="保存网址"
+            android:text="生成链接"
             android:layout_marginEnd="8dp"
+            android:backgroundTint="@color/teal_700"
+            android:textColor="@android:color/white"
             style="@style/Widget.AppCompat.Button" />
 
         <Button
@@ -89,35 +116,16 @@
 
     </LinearLayout>
 
-
-    <LinearLayout
+    <!-- 状态显示 -->
+    <TextView
+        android:id="@+id/tvStatus"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:weightSum="2"
-        android:layout_marginBottom="2dp">
-
-        <!-- 发送请求按钮 -->
-        <Button
-            android:id="@+id/btnSendRequest"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="发送请求"
-            android:layout_marginEnd="8dp"
-            style="@style/Widget.AppCompat.Button" />
-
-        <!-- 获取结果按钮 -->
-        <Button
-            android:id="@+id/btnGetResult"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="获取结果"
-            android:layout_marginStart="8dp"
-            style="@style/Widget.AppCompat.Button" />
-
-    </LinearLayout>
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="4dp"
+        android:text="就绪"
+        android:textSize="13sp"
+        android:textColor="#666666" />
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvAbPrefixes"
