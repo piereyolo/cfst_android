@@ -1,7 +1,7 @@
 name: Build Android Release
 
 on:
-  workflow_dispatch:  # 允许手动触发
+  workflow_dispatch:
 
 jobs:
   build:
@@ -12,13 +12,17 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup JDK 17
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+          accept-android-sdk-licenses: true
+          log-accepted-android-sdk-licenses: true
 
       - name: Make gradlew executable
         run: chmod +x ./gradlew
@@ -31,7 +35,6 @@ jobs:
           KEY_PASSWORD: 12345678
         run: |
           ./gradlew assembleRelease
-          
           echo "✅ 构建完成！"
           echo "APK文件:"
           find . -name "*.apk" -type f | grep -v unaligned
