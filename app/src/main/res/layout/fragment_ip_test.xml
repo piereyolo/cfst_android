@@ -1,214 +1,281 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!--
+  整页放进一个 ScrollView：配置区、按钮、列表各占固定高度，
+  小屏手机放不下时整页滚动，任何控件都不会被顶出屏幕裁剪掉。
+-->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="16dp"
+    android:fillViewport="true"
+    android:clipToPadding="false"
     android:keepScreenOn="true">
 
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="IP测试配置"
-        android:textSize="20sp"
-        android:textStyle="bold"
-        android:gravity="center"
-        android:layout_marginBottom="16dp" />
-
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="测试参数"
-        android:textSize="16sp"
-        android:textStyle="bold"
-        android:layout_marginBottom="8dp" />
-
-    <!-- 线程数 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginBottom="8dp">
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <!-- 配置区：固定高度 + 内部滚动，配置再多也不会把下面的东西顶走 -->
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="272dp"
+            android:fillViewport="true"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="IP测试配置"
+                    android:textSize="20sp"
+                    android:textStyle="bold"
+                    android:gravity="center"
+                    android:layout_marginBottom="12dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="测试参数"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
+                <!-- 线程数 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="8dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="测试线程数:"
+                        android:textSize="14sp"
+                        android:layout_gravity="center_vertical" />
+
+                    <EditText
+                        android:id="@+id/etThreadCount"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:inputType="number"
+                        android:text="100"
+                        android:maxLines="1"
+                        android:background="@android:drawable/edit_text"
+                        android:padding="8dp" />
+
+                </LinearLayout>
+
+                <!-- D段起始值 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="8dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="过滤区域:"
+                        android:textSize="14sp"
+                        android:layout_gravity="center_vertical" />
+
+                    <EditText
+                        android:id="@+id/etDStart"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="LAX,HKG"
+                        android:hint="LAX,HKG 或 中国* 或 *"
+                        android:maxLines="1"
+                        android:background="@android:drawable/edit_text"
+                        android:padding="8dp" />
+
+                </LinearLayout>
+
+                <!-- 过滤区域说明 -->
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp"
+                    android:text="支持 * 任意 / ? 单字符，多个用逗号分隔；中国* 命中所有中国地区，* 命中全部"
+                    android:textSize="12sp"
+                    android:textColor="#888888" />
+
+                <!-- 间隔数 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="8dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="间隔数 (1-254):"
+                        android:textSize="14sp"
+                        android:layout_gravity="center_vertical" />
+
+                    <EditText
+                        android:id="@+id/etDInterval"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:inputType="number"
+                        android:text="8"
+                        android:maxLines="1"
+                        android:background="@android:drawable/edit_text"
+                        android:padding="8dp" />
+
+                </LinearLayout>
+
+                <!-- 测试端口 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="8dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="测试端口:"
+                        android:textSize="14sp"
+                        android:layout_gravity="center_vertical" />
+
+                    <EditText
+                        android:id="@+id/etPort"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:inputType="number"
+                        android:text="443"
+                        android:hint="443 / 80 / 2096"
+                        android:maxLines="1"
+                        android:background="@android:drawable/edit_text"
+                        android:padding="8dp" />
+
+                </LinearLayout>
+
+            </LinearLayout>
+        </ScrollView>
+
+        <!-- 测试按钮 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="8dp">
+
+            <Button
+                android:id="@+id/startButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="开始测试"
+                android:layout_marginEnd="8dp"
+                android:backgroundTint="@color/teal_700"
+                android:textColor="@android:color/white" />
+
+            <Button
+                android:id="@+id/stopButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="停止测试"
+                android:layout_marginStart="8dp"
+                android:backgroundTint="@color/red_500"
+                android:textColor="@android:color/white"
+                android:visibility="gone" />
+
+        </LinearLayout>
+
+        <!-- 状态显示 -->
+        <TextView
+            android:id="@+id/tvSelectedCount"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="已选中: 0个A.B前缀"
+            android:textSize="14sp"
+            android:layout_marginBottom="2dp" />
 
         <TextView
-            android:layout_width="0dp"
+            android:id="@+id/tvGeneratedIPs"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="测试线程数:"
+            android:text="预计生成IP: 0个"
             android:textSize="14sp"
-            android:layout_gravity="center_vertical" />
+            android:layout_marginBottom="6dp" />
 
-        <EditText
-            android:id="@+id/etThreadCount"
-            android:layout_width="0dp"
+        <ProgressBar
+            android:id="@+id/progressBar"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:inputType="number"
-            android:text="100"
-            android:maxLines="1"
-            android:background="@android:drawable/edit_text"
-            android:padding="8dp" />
-
-    </LinearLayout>
-
-    <!-- D段起始值 -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginBottom="8dp">
+            android:max="100"
+            android:progress="0"
+            android:visibility="gone"
+            android:layout_marginBottom="6dp" />
 
         <TextView
-            android:layout_width="0dp"
+            android:id="@+id/statusText"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="过滤区域:"
-            android:textSize="14sp"
-            android:layout_gravity="center_vertical" />
-
-        <EditText
-            android:id="@+id/etDStart"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="LAX,HKG"
-            android:maxLines="1"
-            android:background="@android:drawable/edit_text"
-            android:padding="8dp" />
-
-    </LinearLayout>
-
-    <!-- 间隔数 -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginBottom="16dp">
+            android:text="请选择A.B前缀并配置参数"
+            android:textSize="13sp"
+            android:layout_marginBottom="8dp"
+            android:gravity="center" />
 
         <TextView
-            android:layout_width="0dp"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="间隔数 (1-254):"
-            android:textSize="14sp"
-            android:layout_gravity="center_vertical" />
+            android:text="A.B前缀列表 (TCP 延迟测试)"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="4dp" />
 
-        <EditText
-            android:id="@+id/etDInterval"
-            android:layout_width="0dp"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:inputType="number"
-            android:text="8"
-            android:maxLines="1"
-            android:background="@android:drawable/edit_text"
-            android:padding="8dp" />
+            android:orientation="horizontal"
+            android:padding="4dp"
+            android:layout_marginBottom="4dp">
+
+            <Button
+                android:id="@+id/btnSelectAll"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="全选"
+                android:layout_marginEnd="4dp"/>
+
+            <Button
+                android:id="@+id/btninvertSelection"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="反选"
+                android:layout_marginEnd="4dp"/>
+
+        </LinearLayout>
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recyclerView"
+            android:layout_width="match_parent"
+            android:layout_height="200dp"
+            android:nestedScrollingEnabled="false" />
 
     </LinearLayout>
-
-    <!-- 测试按钮 -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginBottom="16dp">
-
-        <Button
-            android:id="@+id/startButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="开始测试"
-            android:layout_marginEnd="8dp"
-            android:backgroundTint="@color/teal_700"
-            android:textColor="@android:color/white" />
-
-        <Button
-            android:id="@+id/stopButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="停止测试"
-            android:layout_marginStart="8dp"
-            android:backgroundTint="@color/red_500"
-            android:textColor="@android:color/white"
-            android:visibility="gone" />
-
-    </LinearLayout>
-
-    <!-- 状态显示 -->
-    <TextView
-        android:id="@+id/tvSelectedCount"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="已选中: 0个A.B前缀"
-        android:textSize="14sp"
-        android:layout_marginBottom="4dp" />
-
-    <TextView
-        android:id="@+id/tvGeneratedIPs"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="预计生成IP: 0个"
-        android:textSize="14sp"
-        android:layout_marginBottom="8dp" />
-
-    <ProgressBar
-        android:id="@+id/progressBar"
-        style="?android:attr/progressBarStyleHorizontal"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:max="100"
-        android:progress="0"
-        android:visibility="gone"
-        android:layout_marginBottom="8dp" />
-
-    <TextView
-        android:id="@+id/statusText"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="请选择A.B前缀并配置参数"
-        android:textSize="14sp"
-        android:layout_marginBottom="16dp"
-        android:gravity="center" />
-
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="A.B前缀列表 (TCP 443端口测试)"
-        android:textSize="16sp"
-        android:textStyle="bold"
-        android:layout_marginBottom="8dp" />
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:padding="8dp">
-
-        <Button
-            android:id="@+id/btnSelectAll"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="全选"
-            android:layout_marginEnd="4dp"/>
-
-        <Button
-            android:id="@+id/btninvertSelection"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="反选"
-            android:layout_marginEnd="4dp"/>
-
-    </LinearLayout>
-
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/recyclerView"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1" />
-
-</LinearLayout>
+</ScrollView>
