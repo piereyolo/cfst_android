@@ -13,6 +13,7 @@ import android.view.ViewGroup
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import org.json.JSONObject
@@ -40,12 +41,21 @@ class ResultFragment : Fragment() {
     private lateinit var tvFileInfo: TextView
     private lateinit var tvStats: TextView
 
-    private val executor: ExecutorService = Executors.newFixedThreadPool(10)
+    @Volatile private var executor: ExecutorService = Executors.newFixedThreadPool(10)
     private val handler = Handler(Looper.getMainLooper())
 
     private val sResultSettingFile = "ResultSetting.json"
     // 默认延迟阈值
     private var maxDelayThreshold = 2000
+
+    // 共享 ViewModel：拿到 IP 测试页配置的端口（Activity 作用域，同一个实例）
+    private var sharedViewModel: SharedViewModel? = null
+
+    /** 校验用端口，跟「IP测试」页的「测试端口」保持一致。 */
+    private fun testPort(): Int {
+        val vm = sharedViewModel ?: return SharedViewModel.DEFAULT_TEST_PORT
+        return vm.testPort.value ?: SharedViewModel.DEFAULT_TEST_PORT
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -53,6 +63,9 @@ class ResultFragment : Fragment() {
         savedInstanceState: Bundle?
     ): View? {
         val view = inflater.inflate(R.layout.fragment_result, container, false)
+
+        // 共享 ViewModel（Activity 作用域），用于读取「测试端口」配置
+        sharedViewModel = ViewModelProvider(requireActivity()).get(SharedViewModel::class.java)
 
         // 初始化视图
         initViews(view)
@@ -90,7 +103,7 @@ class ResultFragment : Fragment() {
             SaveConfig()
             val thresholdText = etMaxDelay.text.toString()
             if (thresholdText.isNotEmpty()) {
-                maxDelayThreshold = thresholdText.toIntOrNull() ?: 200
+                maxDelayThreshold = thresholdText.toIntOrNull() ?: maxDelayThreshold
                 loadResultsFromFile()
             }
         }
@@ -122,10 +135,11 @@ class ResultFragment : Fragment() {
 
         val totalCount = ips.size
         val completedCount = AtomicInteger(0)
+        val port = testPort()
 
         ips.forEachIndexed { index, ip ->
             executor.submit {
-                val isValid = testTCPConnect(ip, 443, 5000)
+                val isValid = testTCPConnect(ip, port, 5000)
 
                 handler.post {
                     // 更新该IP的验证状态
@@ -141,7 +155,7 @@ class ResultFragment : Fragment() {
                         // 统计有效IP数量
                         val validCount = adapter.getValidIPsCount()
                         Toast.makeText(requireContext(),
-                            "验证完成！有效IP: $validCount/$totalCount",
+                            "验证完成！端口 $port\n有效IP: $validCount/$totalCount",
                             Toast.LENGTH_LONG).show()
                     }
                 }
@@ -199,8 +213,8 @@ class ResultFragment : Fragment() {
                     val parts = line.split(",")
                     if (parts.size >= 4) {
                         val ip = parts[0].trim()
-                        val delay = parts[1].trim().toLongOrNull() ?: -1
-                        val success = parts[2].trim() == "成功"
+                        val delay = parts[2].trim().toLongOrNull() ?: -1
+                        val success = parts[3].trim() == "成功"
 
                         // 只添加成功且延迟小于阈值的项
                         if (success && delay in 0..maxDelayThreshold) {
@@ -233,7 +247,7 @@ class ResultFragment : Fragment() {
                     val successCount = lines.count { it.contains(",成功,") }
                     val failedCount = totalLines - successCount
 
-                    tvStats.text = "统计: 总共 {$totalLines} 个结果 | 成功{$successCount}个 | 失败{$failedCount}个 | 过滤后{$filteredCount}个"
+                    tvStats.text = "统计: 总共 $totalLines 个结果 | 成功 $successCount 个 | 失败 $failedCount 个 | 过滤后 $filteredCount 个"
                 }
 
             } catch (e: Exception) {
@@ -372,7 +386,7 @@ class ResultFragment : Fragment() {
 
             init {
                 itemView.setOnClickListener {
-                    val position = adapterPosition
+                    val position = bindingAdapterPosition
                     if (position != RecyclerView.NO_POSITION) {
                         onItemClickListener?.invoke(items[position].ip)
                     }
@@ -451,9 +465,16 @@ class ResultFragment : Fragment() {
         if (::etMaxDelay.isInitialized) {
             val thresholdText = etMaxDelay.text.toString()
             if (thresholdText.isNotEmpty()) {
-                maxDelayThreshold = thresholdText.toIntOrNull() ?: 200
+                maxDelayThreshold = thresholdText.toIntOrNull() ?: maxDelayThreshold
                 loadResultsFromFile()
             }
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // 关闭线程池，否则 Fragment 销毁后这 10 个线程会一直挂着
+        executor.shutdownNow()
+        executor = Executors.newFixedThreadPool(10)
     }
 }
