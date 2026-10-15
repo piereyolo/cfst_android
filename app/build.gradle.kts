@@ -19,6 +19,14 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // AndroidManifest.xml 里设了 android:extractNativeLibs="true"，
+    // AGP 8 要求 build.gradle 也显式对齐，否则打包时 warning。
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
     signingConfigs {
         create("release") {
             storeFile = file("Untitled.jks")
