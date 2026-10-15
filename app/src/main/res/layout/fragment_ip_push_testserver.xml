@@ -20,7 +20,9 @@
         android:id="@+id/etNodeLink"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:maxLines="1"
+        android:inputType="textMultiLine"
+        android:minLines="1"
+        android:maxLines="3"
         android:hint="节点链接"
         android:padding="12dp"
         android:layout_marginBottom="12dp" />
@@ -79,7 +81,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:weightSum="2"
+        android:weightSum="3"
         android:layout_marginBottom="2dp">
 
         <!-- 生成链接按钮 -->
@@ -113,6 +115,16 @@
             android:backgroundTint="@color/red_500"
             android:textColor="@android:color/white"
             android:visibility="gone" />
+
+        <Button
+            android:id="@+id/btnGenerateLink2"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="剪切板IP生成链接"
+            app:layout_constraintStart_toEndOf="@+id/btnLocalTestHttping"
+            android:layout_marginStart="8dp"
+            style="@style/Widget.AppCompat.Button" />
 
     </LinearLayout>
 
