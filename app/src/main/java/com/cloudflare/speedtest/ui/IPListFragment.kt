@@ -101,7 +101,7 @@ class IPListFragment : Fragment() {
                         if (lines.isNotEmpty()) {
                             // 解析并显示本地保存的IP列表
                             parseAndDisplayIPs(lines.joinToString("\n"), isFromLocal = true)
-                            Toast.makeText(context, "已加载本地保存的IP列表", Toast.LENGTH_SHORT).show()
+                            //Toast.makeText(context, "已加载本地保存的IP列表", Toast.LENGTH_SHORT).show()
                         } else {
                             Toast.makeText(context, "本地IP列表为空，请从网络获取", Toast.LENGTH_SHORT).show()
                         }
