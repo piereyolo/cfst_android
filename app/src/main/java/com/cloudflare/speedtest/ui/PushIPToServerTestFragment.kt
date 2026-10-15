@@ -103,6 +103,8 @@ class PushIPToServerTestFragment: Fragment() {
     private lateinit var etProbeTarget: EditText
     private lateinit var btnExportLinks: Button
 
+    private lateinit var btnGenerateLink2: Button
+
     private lateinit var btnLocalTestHttping: Button
 
     private lateinit var stopTestDownloadButton: Button
@@ -165,6 +167,7 @@ class PushIPToServerTestFragment: Fragment() {
         recyclerView = view.findViewById(R.id.rvAbPrefixes)
         tvStatus = view.findViewById(R.id.tvStatus)
         btnExportLinks = view.findViewById(R.id.btnExportLinks)
+        btnGenerateLink2 = view.findViewById(R.id.btnGenerateLink2)
         btnLocalTestHttping = view.findViewById(R.id.btnLocalTestHttping)
         stopTestDownloadButton = view.findViewById(R.id.stopTestDownloadButton)
 
@@ -186,6 +189,10 @@ class PushIPToServerTestFragment: Fragment() {
             exportLinksToClipboard()
         }
 
+        btnGenerateLink2.setOnClickListener {
+            exportLinksToClipboard2()
+        }
+
 
         btnLocalTestHttping.setOnClickListener {
             stopTestDownloadButton.isVisible = true
@@ -205,7 +212,6 @@ class PushIPToServerTestFragment: Fragment() {
 
 
     }
-
 
     /**
      * 把列表里速度达标的 IP 逐个替换进节点链接的 [[AABB]]，全部塞进剪切板。
@@ -243,6 +249,74 @@ class PushIPToServerTestFragment: Fragment() {
 
         Toast.makeText(requireContext(), "已生成 ${links.size} 条链接到剪切板", Toast.LENGTH_LONG).show()
         updateStatus("已生成 ${links.size} 条链接（速度 > $minKb KB/s），已送入剪切板")
+    }
+
+
+    private fun isValidIP(ip: String): Boolean {
+        return when {
+            // IPv4检查
+            ip.count { it == '.' } == 3 -> {
+                ip.split('.').all { part ->
+                    part.toIntOrNull() in 0..255
+                }
+            }
+            // IPv6检查（包含冒号）
+            ip.contains(':') -> {
+                // 基本IPv6格式检查
+                val parts = ip.split(':')
+                parts.size in 2..8 && parts.all { part ->
+                    part.isEmpty() || part.all { char ->
+                        char.isDigit() || char in 'a'..'f' || char in 'A'..'F'
+                    }
+                }
+            }
+            else -> false
+        }
+    }
+
+    private fun exportLinksToClipboard2() {
+        val template = etNodeLink.text.toString().trim()
+        if (template.isEmpty()) {
+            Toast.makeText(requireContext(), "请先填入节点链接", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        try {
+            val clipboard = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val clipData = clipboard.primaryClip
+            if (clipData == null || clipData.itemCount == 0) {
+                Toast.makeText(requireContext(), "剪贴板为空", Toast.LENGTH_SHORT).show()
+                return
+            }
+
+            val text = clipData.getItemAt(0).text.toString()
+//            val ipList = text.trim().split("\n").filter { it.isNotBlank() }
+//
+//            if (ipList.isEmpty()) {
+//                Toast.makeText(requireContext(), "未找到有效IP", Toast.LENGTH_SHORT).show()
+//                return
+//            }
+
+            val links = text.trim()
+                .split("\n")
+                .asSequence()
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .filter { isValidIP(it) }
+                .map { ProxyParser.replaceAddress(template, it) }
+                .toList()
+
+            clipboard.setPrimaryClip(ClipData.newPlainText("节点链接", links.joinToString("\n")))
+
+            Toast.makeText(requireContext(), "已生成 ${links.size} 条链接到剪切板", Toast.LENGTH_LONG).show()
+
+        }catch (e: Exception){
+
+        }
+
+
+
+
     }
 
     private fun LocalTestHttping() {
