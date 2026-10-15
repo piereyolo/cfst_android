@@ -26,7 +26,8 @@ class MainActivity : AppCompatActivity() {
         adapter.addFragment(IPListFragment(), "IP 列表")
         adapter.addFragment(IPTestFragment(), "IP 测试")
         adapter.addFragment(ResultFragment(), "测试结果")
-        adapter.addFragment(PushIPToServerTestFragment(), "上传测试")
+        adapter.addFragment(PushIPToServerTestFragment(), "下载测试")
+        adapter.addFragment(VerifyNodeFragment(), "真连接验证")
 
         viewPager.adapter = adapter
 
