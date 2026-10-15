@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:keepScreenOn="true">
+
+    <!-- 顶部说明 -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="真连接验证"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="2dp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="读取剪切板里的 vless/vmess 链接，逐条起 xray 跑真实代理会话。通过的地址点击即可复制到剪切板。"
+        android:textSize="11sp"
+        android:textColor="#888888"
+        android:layout_marginBottom="12dp" />
+
+    <!-- 参数行 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:weightSum="3"
+        android:layout_marginBottom="6dp">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:layout_marginEnd="6dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="次数"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/etVerifyAttempts"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="3"
+                android:text="3"
+                android:inputType="number"
+                android:singleLine="true"
+                android:gravity="center"
+                android:padding="10dp" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:layout_marginEnd="6dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="间隔秒"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/etVerifyInterval"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="2"
+                android:text="2"
+                android:inputType="number"
+                android:singleLine="true"
+                android:gravity="center"
+                android:padding="10dp" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="失败阈值"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/etVerifyFailThreshold"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="1"
+                android:text="1"
+                android:inputType="number"
+                android:singleLine="true"
+                android:gravity="center"
+                android:padding="10dp" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="失败次数超过阈值即判死链并提前结束该链接剩余次数。测速地址固定为 google.com/generate_204"
+        android:textSize="11sp"
+        android:textColor="#888888"
+        android:layout_marginBottom="12dp" />
+
+    <!-- 操作按钮 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:weightSum="2"
+        android:layout_marginBottom="10dp">
+
+        <Button
+            android:id="@+id/btnVlessVerify"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="开始验证"
+            android:backgroundTint="@color/teal_700"
+            android:textColor="@android:color/white"
+            android:layout_marginEnd="6dp"
+            style="@style/Widget.AppCompat.Button" />
+
+
+
+        <Button
+            android:id="@+id/btnStopVlessVerify"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="停止"
+            android:backgroundTint="@color/red_500"
+            android:textColor="@android:color/white"
+            android:visibility="gone"
+            style="@style/Widget.AppCompat.Button" />
+
+        <Button
+            android:id="@+id/btnCopyAllVerified"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="复制结果"
+            android:backgroundTint="@color/teal_700"
+            android:textColor="@android:color/white"
+            app:layout_constraintStart_toEndOf="@+id/btnVlessVerify"
+            android:layout_marginEnd="6dp"
+            style="@style/Widget.AppCompat.Button" />
+
+    </LinearLayout>
+
+    <!-- 状态显示 -->
+    <TextView
+        android:id="@+id/tvVerifyStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="6dp"
+        android:text="就绪，等待剪切板里的 vless/vmess 链接"
+        android:textSize="13sp"
+        android:textColor="#666666" />
+
+    <!-- 列表头 -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="4dp"
+        android:layout_marginTop="6dp"
+        android:text="通过验证的地址（点击复制单个）"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+
+    <!-- 结果列表 -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rvVerified"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+</LinearLayout>
